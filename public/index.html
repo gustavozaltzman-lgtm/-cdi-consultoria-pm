@@ -7,6 +7,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="js/audit-kpis.js"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -74,6 +75,7 @@
       <a data-view="risks" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">⚠️ Riesgos</a>
       <a data-view="minutes" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">📝 Minutas &amp; Acciones</a>
       <a data-view="kpis" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">📈 KPIs Logísticos</a>
+      <a data-view="audits" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">🔍 Auditorías Cíclicas</a>
       <a data-view="beforeafter" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">🔁 Antes vs Después</a>
       <a data-view="team" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">👥 Equipo</a>
       <a data-view="companies" id="navCompanies" class="hidden sidebar-link gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer border-t border-white/10 mt-2 pt-4">🏢 Empresas</a>
@@ -268,6 +270,90 @@
         </div>
       </section>
 
+      <!-- AUDITORÍAS CÍCLICAS -->
+      <section id="view-audits" class="view space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-navy text-lg">Auditorías Cíclicas</h2>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-4 space-y-3">
+          <h3 class="text-sm font-semibold text-navy">Nuevo conteo</h3>
+          <p class="text-xs text-gray-500">Cargá solo los datos crudos del conteo — los KPIs se calculan automáticamente al guardar.</p>
+          <form id="auditForm" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label class="text-xs text-gray-500">Sucursal / Depósito</label>
+              <input name="branch_name" required class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Fecha</label>
+              <input type="date" name="audit_date" required class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Duración (min)</label>
+              <input type="number" min="0" name="duration_minutes" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Auditor</label>
+              <input name="auditor_name" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">SKUs contados</label>
+              <input type="number" min="0" name="total_skus_counted" required class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">SKUs exactos</label>
+              <input type="number" min="0" name="exact_skus" required class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Valor teórico ($)</label>
+              <input type="number" step="0.01" name="total_theoretical_val" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Valor físico ($)</label>
+              <input type="number" step="0.01" name="total_physical_val" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Ubicaciones fantasma</label>
+              <input type="number" min="0" name="ghost_locations_count" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Errores de cruce POS</label>
+              <input type="number" min="0" name="pos_cross_errors_count" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+            </div>
+            <div class="col-span-2 md:col-span-4 flex items-center gap-3 pt-1">
+              <button type="submit" class="text-xs bg-navy text-white px-4 py-2 rounded-md hover:bg-navy-light">Guardar conteo y calcular KPIs</button>
+              <span id="auditFormMsg" class="text-xs"></span>
+            </div>
+          </form>
+        </div>
+
+        <div id="auditKpiCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+        <div class="bg-white rounded-xl shadow-sm p-4">
+          <h3 class="font-semibold text-navy mb-2 text-sm">Evolución de KPIs por auditoría</h3>
+          <canvas id="chartAuditKpis" height="240"></canvas>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table class="min-w-full text-xs" id="tableAudits">
+            <thead class="bg-navy text-white">
+              <tr>
+                <th class="px-3 py-2 text-left">Fecha</th>
+                <th class="px-3 py-2 text-left">Sucursal</th>
+                <th class="px-3 py-2 text-left">Auditor</th>
+                <th class="px-3 py-2 text-left">SKUs (exactos/contados)</th>
+                <th class="px-3 py-2 text-left">IRA %</th>
+                <th class="px-3 py-2 text-left">Descalce %</th>
+                <th class="px-3 py-2 text-left">Fantasmas %</th>
+                <th class="px-3 py-2 text-left">Cruce POS %</th>
+                <th class="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
       <!-- BEFORE / AFTER -->
       <section id="view-beforeafter" class="view space-y-4">
         <div class="flex items-center justify-between">
@@ -428,12 +514,14 @@ const state = {
   config: null,
   tasks: [], plan_stages: [], risks: [], minutes: [], actions: [],
   kpis: [], before_after: [], team_members: [],
+  audit_logs: [], kpi_history: [],
   dirty: false
 };
 
 const TABLE_ENDPOINT = {
   tasks: 'tasks', plan_stages: 'plan-stages', risks: 'risks', minutes: 'minutes',
-  actions: 'actions', kpis: 'kpis', before_after: 'before-after', team_members: 'team-members'
+  actions: 'actions', kpis: 'kpis', before_after: 'before-after', team_members: 'team-members',
+  audit_logs: 'audit-logs', kpi_history: 'audit-logs/kpi-history'
 };
 
 /* ---------------- Demo data (fallback offline / modo demo) ---------------- */
@@ -495,8 +583,17 @@ const DEMO_DATA = {
     { id: 2, name: 'Consultor Senior', role: 'Consultor Senior de Logística', email: 'consultor.senior@cdiconsultoria.com', color: '#38a169' },
     { id: 3, name: 'Analista TI', role: 'Analista de Sistemas', email: 'analista.ti@cdiconsultoria.com', color: '#d69e2e' },
     { id: 4, name: 'Gerente de Operaciones', role: 'Sponsor del Cliente', email: 'operaciones@cliente.com', color: '#2c5282' }
+  ],
+  audit_logs: [
+    { id: 1, branch_name: 'Depósito Central', audit_date: '2026-05-10', duration_minutes: 95, total_skus_counted: 420, exact_skus: 391, total_theoretical_val: 1850000, total_physical_val: 1798500, ghost_locations_count: 6, pos_cross_errors_count: 9, auditor_name: 'Equipo CDI' },
+    { id: 2, branch_name: 'Depósito Central', audit_date: '2026-06-14', duration_minutes: 80, total_skus_counted: 430, exact_skus: 405, total_theoretical_val: 1910000, total_physical_val: 1889000, ghost_locations_count: 3, pos_cross_errors_count: 5, auditor_name: 'Equipo CDI' }
   ]
 };
+// Los KPIs demo se derivan con la misma fórmula que usa el backend, para que
+// el modo demo y producción se vean consistentes.
+DEMO_DATA.kpi_history = DEMO_DATA.audit_logs.flatMap((a) =>
+  AuditKpis.computeAuditKpis(a).map((k, i) => ({ id: a.id * 10 + i, audit_id: a.id, recorded_at: a.audit_date, ...k }))
+);
 
 /* ---------------- Persistencia local ---------------- */
 function loadLocal() {
@@ -584,6 +681,7 @@ async function persist(table, id, patch, isNew, localArray, localRecord) {
 
 async function removeRecord(table, id) {
   state[table] = state[table].filter((r) => r.id !== id);
+  if (table === 'audit_logs') state.kpi_history = state.kpi_history.filter((k) => k.audit_id !== id);
   saveLocal();
   render();
   if (state.mode === 'demo') { setSync('local'); return; }
@@ -859,6 +957,81 @@ function renderKpis() {
   });
 }
 
+/* ---------------- Render: Auditorías Cíclicas ---------------- */
+const AUDIT_KPI_DEFS = [
+  { name: 'IRA % (Exactitud de Inventario)', label: 'IRA — Exactitud de Inventario', good: 'high' },
+  { name: 'Descalce Monetario %', label: 'Descalce Monetario', good: 'low' },
+  { name: 'Ubicaciones Fantasma %', label: 'Ubicaciones Fantasma', good: 'low' },
+  { name: 'Errores de Cruce POS %', label: 'Errores de Cruce POS', good: 'low' }
+];
+function kpisForAudit(auditId) {
+  const map = {};
+  state.kpi_history.filter((k) => k.audit_id === auditId).forEach((k) => { map[k.kpi_name] = Number(k.calculated_value); });
+  return map;
+}
+function fmtKpi(v) { return v === undefined || v === null ? '-' : v + '%'; }
+function kpiColor(def, value) {
+  if (value === undefined) return 'text-gray-400';
+  if (def.good === 'high') return value >= 95 ? 'text-green-600' : value >= 85 ? 'text-amber-600' : 'text-red-600';
+  return value <= 2 ? 'text-green-600' : value <= 5 ? 'text-amber-600' : 'text-red-600';
+}
+
+let chartAuditKpis;
+function renderAudits() {
+  const sorted = [...state.audit_logs].sort((a, b) => new Date(b.audit_date) - new Date(a.audit_date) || b.id - a.id);
+  const latest = sorted[0];
+  const latestKpis = latest ? kpisForAudit(latest.id) : {};
+
+  const cardsContainer = document.getElementById('auditKpiCards');
+  cardsContainer.innerHTML = latest ? AUDIT_KPI_DEFS.map((d) => {
+    const v = latestKpis[d.name];
+    return `
+    <div class="bg-white rounded-xl shadow-sm p-4 space-y-1">
+      <p class="text-[11px] text-gray-400">${d.label}</p>
+      <p class="text-2xl font-bold ${kpiColor(d, v)}">${fmtKpi(v)}</p>
+      <p class="text-[11px] text-gray-400">Último conteo: ${latest.branch_name} · ${fmtDate(latest.audit_date)}</p>
+    </div>`;
+  }).join('') : `<p class="text-gray-400 text-sm col-span-full">Sin auditorías registradas todavía.</p>`;
+
+  const tbody = document.querySelector('#tableAudits tbody');
+  tbody.innerHTML = sorted.map((a) => {
+    const k = kpisForAudit(a.id);
+    return `
+    <tr class="border-b hover:bg-gray-50">
+      <td class="px-3 py-2">${fmtDate(a.audit_date)}</td>
+      <td class="px-3 py-2 font-medium">${a.branch_name}</td>
+      <td class="px-3 py-2">${a.auditor_name || '-'}</td>
+      <td class="px-3 py-2">${a.exact_skus}/${a.total_skus_counted}</td>
+      <td class="px-3 py-2">${fmtKpi(k['IRA % (Exactitud de Inventario)'])}</td>
+      <td class="px-3 py-2">${fmtKpi(k['Descalce Monetario %'])}</td>
+      <td class="px-3 py-2">${fmtKpi(k['Ubicaciones Fantasma %'])}</td>
+      <td class="px-3 py-2">${fmtKpi(k['Errores de Cruce POS %'])}</td>
+      <td class="px-3 py-2"><button data-del="audit_logs" data-id="${a.id}" class="text-red-400 hover:text-red-600">✕</button></td>
+    </tr>`;
+  }).join('') || emptyRow(9);
+
+  const chronological = [...state.audit_logs].sort((a, b) => new Date(a.audit_date) - new Date(b.audit_date) || a.id - b.id);
+  const labels = chronological.map((a) => `${fmtDate(a.audit_date)} · ${a.branch_name}`);
+  const colors = ['#1e3a5f', '#e53e3e', '#d69e2e', '#38a169'];
+
+  const ctx = document.getElementById('chartAuditKpis');
+  if (chartAuditKpis) chartAuditKpis.destroy();
+  chartAuditKpis = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: AUDIT_KPI_DEFS.map((d, i) => ({
+        label: d.label,
+        data: chronological.map((a) => kpisForAudit(a.id)[d.name] ?? null),
+        borderColor: colors[i],
+        backgroundColor: colors[i],
+        tension: 0.25
+      }))
+    },
+    options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } } }
+  });
+}
+
 /* ---------------- Render: Before/After ---------------- */
 function renderBeforeAfter() {
   const tbody = document.querySelector('#tableBeforeAfter tbody');
@@ -907,6 +1080,7 @@ function render() {
   renderMinutes();
   renderActions();
   renderKpis();
+  renderAudits();
   renderBeforeAfter();
   renderTeam();
 }
@@ -1000,6 +1174,11 @@ function switchView(view) {
   document.querySelectorAll('.sidebar-link').forEach(l => l.classList.toggle('active', l.dataset.view === view));
   if (view === 'dashboard') renderDashboard();
   if (view === 'kpis') renderKpis();
+  if (view === 'audits') {
+    renderAudits();
+    const dateInput = document.querySelector('#auditForm [name="audit_date"]');
+    if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+  }
   if (view === 'companies') renderCompaniesAdmin();
 }
 document.querySelectorAll('.sidebar-link').forEach(link => {
@@ -1018,6 +1197,80 @@ modeSelector.addEventListener('change', async () => {
   localStorage.setItem(MODE_KEY, state.mode);
   await fetchAll();
   render();
+});
+
+/* ---------------- Auditorías Cíclicas: captura + Optimistic UI ---------------- */
+document.getElementById('auditForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const msg = document.getElementById('auditFormMsg');
+  const fd = new FormData(form);
+  const numOrNull = (v) => (v === null || v === '' ? null : Number(v));
+
+  const payload = {
+    branch_name: String(fd.get('branch_name') || '').trim(),
+    audit_date: fd.get('audit_date') || new Date().toISOString().slice(0, 10),
+    duration_minutes: numOrNull(fd.get('duration_minutes')),
+    total_skus_counted: Number(fd.get('total_skus_counted')),
+    exact_skus: Number(fd.get('exact_skus')),
+    total_theoretical_val: numOrNull(fd.get('total_theoretical_val')),
+    total_physical_val: numOrNull(fd.get('total_physical_val')),
+    ghost_locations_count: Number(fd.get('ghost_locations_count') || 0),
+    pos_cross_errors_count: Number(fd.get('pos_cross_errors_count') || 0),
+    auditor_name: String(fd.get('auditor_name') || '').trim() || null
+  };
+
+  if (!payload.branch_name || !Number.isFinite(payload.total_skus_counted) || !Number.isFinite(payload.exact_skus)) {
+    msg.textContent = 'Completá sucursal, SKUs contados y SKUs exactos.';
+    msg.className = 'text-xs text-red-600';
+    return;
+  }
+  if (payload.exact_skus > payload.total_skus_counted) {
+    msg.textContent = 'Los SKUs exactos no pueden superar a los SKUs contados.';
+    msg.className = 'text-xs text-red-600';
+    return;
+  }
+
+  // Optimistic UI: se muestra el registro y sus KPIs calculados de inmediato,
+  // sin esperar la confirmación del servidor.
+  const tempId = nextTempId('audit_logs');
+  state.audit_logs.push({ id: tempId, ...payload });
+  state.kpi_history.push(...AuditKpis.computeAuditKpis(payload).map((k, i) => ({ id: `temp-${tempId}-${i}`, audit_id: tempId, recorded_at: payload.audit_date, ...k })));
+  render();
+  switchView('audits');
+  form.reset();
+  const dateInput = form.querySelector('[name="audit_date"]');
+  if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
+  msg.textContent = 'Calculado — guardando…';
+  msg.className = 'text-xs text-amber-600';
+
+  if (state.mode === 'demo') {
+    saveLocal();
+    setSync('local');
+    msg.textContent = 'Guardado (modo demo).';
+    msg.className = 'text-xs text-green-600';
+    return;
+  }
+
+  try {
+    const res = await apiCall('/audit-logs', { method: 'POST', body: JSON.stringify(payload) });
+    // Reconciliar: reemplazar el registro optimista por el confirmado del servidor.
+    state.audit_logs = state.audit_logs.filter((a) => a.id !== tempId);
+    state.kpi_history = state.kpi_history.filter((k) => k.audit_id !== tempId);
+    const { kpis, ...auditRow } = res.data;
+    state.audit_logs.push(auditRow);
+    state.kpi_history.push(...kpis);
+    saveLocal();
+    setSync('synced');
+    msg.textContent = 'Auditoría guardada.';
+    msg.className = 'text-xs text-green-600';
+    render();
+  } catch (err) {
+    saveLocal();
+    setSync('offline');
+    msg.textContent = 'Sin conexión: guardado localmente, se sincronizará al reconectar.';
+    msg.className = 'text-xs text-amber-600';
+  }
 });
 
 /* ---------------- Exportar a Excel ---------------- */

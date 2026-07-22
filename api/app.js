@@ -179,6 +179,10 @@ Object.keys(TABLES).forEach((table) => {
   app.use(`/api${routePath}`, buildCrudRouter(table));
 });
 
+// audit_logs / kpi_history — ruta dedicada (no CRUD genérico) porque crear una
+// auditoría implica calcular y persistir sus KPIs en la misma transacción.
+app.use('/api/audit-logs', require('./auditRoutes'));
+
 // config — una fila por empresa, sin DELETE/POST, solo GET y PUT
 app.get('/api/config', asyncRoute(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM config WHERE company_id = $1', [req.companyId]);

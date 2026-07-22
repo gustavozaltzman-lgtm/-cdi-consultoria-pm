@@ -29,6 +29,11 @@ Cada empresa/cliente ("company") tiene sus datos completamente aislados; el acce
    node scripts/run-sql.js sql/schema_v2_multitenant_upgrade.sql
    ```
    (Es idempotente: si ya está aplicada, no hace nada.)
+
+   Auditorías cíclicas de inventario y su historial de KPIs (`audit_logs`, `kpi_history`):
+   ```bash
+   node scripts/run-sql.js sql/schema_v3_audit_cycles.sql
+   ```
 5. Crear el usuario admin de CDI:
    ```bash
    node scripts/create-user.js --role admin --email vos@cdiconsultoria.com --password unaContraseñaSegura --name "Tu Nombre"
