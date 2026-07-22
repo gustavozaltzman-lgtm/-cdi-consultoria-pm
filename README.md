@@ -5,7 +5,7 @@ SPA + API para el seguimiento de proyectos de consultoría en logística e inven
 ## Stack
 - **DB**: Neon PostgreSQL (serverless)
 - **API**: Node.js + Express (`api/app.js`), corre en Render (`server.js`) o Vercel Serverless (`api/index.js`)
-- **Frontend**: `index.html` único — Tailwind CDN, Chart.js, SheetJS. Sin build step.
+- **Frontend**: `public/index.html` único — Tailwind CDN, Chart.js, SheetJS. Sin build step. Vive en `public/` para que Vercel lo sirva como estático (si quedara en la raíz, Vercel lo enruta como Express zero-config y lo pisa la función serverless).
 
 ## Setup
 
@@ -22,11 +22,11 @@ SPA + API para el seguimiento de proyectos de consultoría en logística e inven
 ```bash
 npm run dev
 ```
-La API queda en `http://localhost:3001/api`. Abrir `index.html` en el navegador (o servirlo con cualquier static server) y cambiar el selector superior a **Modo Producción**. Si el frontend no vive en el mismo dominio que la API, ajustar `API_BASE` en `index.html`.
+La API queda en `http://localhost:3001/api`. Abrir `public/index.html` en el navegador (o servirlo con cualquier static server) y cambiar el selector superior a **Modo Producción**. Si el frontend no vive en el mismo dominio que la API, ajustar `API_BASE` en `public/index.html`.
 
 ## Deploy
 - **Backend en Render**: Web Service, build `npm install`, start `npm start`, variable `DATABASE_URL`.
-- **Frontend + API en Vercel**: un solo proyecto, `vercel.json` ya enruta `/api/*` a `api/index.js` y sirve `index.html`. Configurar `DATABASE_URL` como variable de entorno del proyecto.
+- **Frontend + API en Vercel**: un solo proyecto. `vercel.json` enruta `/api/*` a `api/index.js`; todo lo demás lo sirve Vercel automáticamente desde `public/`. Configurar `DATABASE_URL` como variable de entorno del proyecto.
 
 ## Modo Demo vs Producción
 El selector superior alterna entre datos locales (LocalStorage, con seed embebido) y la API real. La edición inline funciona en ambos modos con actualización optimista; en Producción, si la API no responde, los cambios quedan en LocalStorage y el indicador pasa a "Sin Conexión" hasta reconectar.
