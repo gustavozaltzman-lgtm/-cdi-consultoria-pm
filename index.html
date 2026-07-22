@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CDI Consultoría — Gestión de Proyectos</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: { DEFAULT: '#1e3a5f', dark: '#152a45', light: '#2c5282' },
+          brandgreen: '#38a169',
+          amber: '#d69e2e',
+          panel: '#f8f9fa'
+        }
+      }
+    }
+  };
+</script>
+<style>
+  body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  .cell-editable:hover { background-color: #fffbea; cursor: text; }
+  .cell-editable:focus { outline: 2px solid #d69e2e; background: white; }
+  ::-webkit-scrollbar { height: 8px; width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
+  .sidebar-link.active { background-color: rgba(255,255,255,0.12); border-left: 3px solid #d69e2e; }
+  .view { display: none; }
+  .view.active { display: block; }
+  [contenteditable]:empty:before { content: attr(data-placeholder); color: #a0aec0; }
+</style>
+</head>
+<body class="bg-panel text-gray-800 min-h-screen">
+
+<div id="app" class="flex h-screen overflow-hidden">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar" class="bg-navy text-white w-64 flex-shrink-0 flex flex-col transition-all duration-200 overflow-hidden">
+    <div class="p-4 border-b border-white/10 flex items-center gap-2">
+      <div class="w-9 h-9 rounded-lg bg-amber flex items-center justify-center font-bold text-navy-dark">CDI</div>
+      <div class="leading-tight">
+        <div class="font-semibold text-sm">CDI Consultoría</div>
+        <div class="text-xs text-white/60">Gestión de Proyectos</div>
+      </div>
+    </div>
+    <nav class="flex-1 overflow-y-auto py-2 text-sm">
+      <a data-view="dashboard" class="sidebar-link active flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">📊 Dashboard</a>
+      <a data-view="gantt" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">📅 Gantt</a>
+      <a data-view="plan" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">🗂️ Plan CDI</a>
+      <a data-view="risks" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">⚠️ Riesgos</a>
+      <a data-view="minutes" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">📝 Minutas &amp; Acciones</a>
+      <a data-view="kpis" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">📈 KPIs Logísticos</a>
+      <a data-view="beforeafter" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">🔁 Antes vs Después</a>
+      <a data-view="team" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">👥 Equipo</a>
+    </nav>
+    <div class="p-3 border-t border-white/10 text-xs text-white/50">v1.0 · CDI Consultoría</div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+
+    <!-- TOPBAR -->
+    <header class="bg-white border-b border-gray-200 px-4 py-3 flex flex-wrap items-center gap-3 justify-between">
+      <div class="flex items-center gap-3">
+        <button id="btnToggleSidebar" class="p-2 rounded hover:bg-gray-100" title="Mostrar/ocultar menú">☰</button>
+        <div>
+          <h1 id="headerProjectName" class="font-semibold text-navy text-lg leading-tight">—</h1>
+          <p id="headerClientName" class="text-xs text-gray-500">—</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <select id="modeSelector" class="text-xs border rounded-md px-2 py-1.5 bg-gray-50">
+          <option value="demo">Modo Demo (datos locales)</option>
+          <option value="production">Modo Producción (API)</option>
+        </select>
+        <div id="syncIndicator" class="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full bg-gray-100">
+          <span id="syncDot" class="w-2 h-2 rounded-full bg-gray-400"></span>
+          <span id="syncLabel">Inicializando…</span>
+        </div>
+        <button id="btnExport" class="text-xs font-medium bg-brandgreen text-white px-3 py-1.5 rounded-md hover:bg-green-700">⬇ Exportar Excel</button>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-6">
+
+      <!-- DASHBOARD -->
+      <section id="view-dashboard" class="view active space-y-6">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 border-navy">
+            <p class="text-xs text-gray-500">Avance General</p>
+            <p id="kpiOverallProgress" class="text-2xl font-bold text-navy">—</p>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 border-brandgreen">
+            <p class="text-xs text-gray-500">Tareas Totales</p>
+            <p id="kpiTotalTasks" class="text-2xl font-bold text-brandgreen">—</p>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 border-amber">
+            <p class="text-xs text-gray-500">Días Restantes</p>
+            <p id="kpiDaysRemaining" class="text-2xl font-bold text-amber">—</p>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 border-red-500">
+            <p class="text-xs text-gray-500">Riesgos Activos</p>
+            <p id="kpiActiveRisks" class="text-2xl font-bold text-red-500">—</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <h3 class="font-semibold text-navy mb-2 text-sm">Estado de Tareas</h3>
+            <canvas id="chartStatus" height="220"></canvas>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <h3 class="font-semibold text-navy mb-2 text-sm">Avance por Etapa</h3>
+            <canvas id="chartStage" height="220"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- GANTT -->
+      <section id="view-gantt" class="view space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-navy text-lg">Cronograma (Gantt)</h2>
+          <button data-add="tasks" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">+ Nueva Tarea</button>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table class="min-w-full text-xs" id="tableTasks">
+            <thead class="bg-navy text-white">
+              <tr>
+                <th class="px-3 py-2 text-left">Etapa</th>
+                <th class="px-3 py-2 text-left">Actividad</th>
+                <th class="px-3 py-2 text-left">Responsable</th>
+                <th class="px-3 py-2 text-left">Prioridad</th>
+                <th class="px-3 py-2 text-left">Inicio</th>
+                <th class="px-3 py-2 text-left">Fin</th>
+                <th class="px-3 py-2 text-left">Estado</th>
+                <th class="px-3 py-2 text-left w-40">Avance</th>
+                <th class="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PLAN CDI -->
+      <section id="view-plan" class="view space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-navy text-lg">Plan Metodológico CDI</h2>
+          <button data-add="plan_stages" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">+ Nueva Actividad</button>
+        </div>
+        <div id="planTree" class="space-y-3"></div>
+      </section>
+
+      <!-- RISKS -->
+      <section id="view-risks" class="view space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-navy text-lg">Matriz de Riesgos</h2>
+          <button data-add="risks" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">+ Nuevo Riesgo</button>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table class="min-w-full text-xs" id="tableRisks">
+            <thead class="bg-navy text-white">
+              <tr>
+                <th class="px-3 py-2 text-left">Riesgo</th>
+                <th class="px-3 py-2 text-left">Categoría</th>
+                <th class="px-3 py-2 text-left">Probabilidad</th>
+                <th class="px-3 py-2 text-left">Impacto</th>
+                <th class="px-3 py-2 text-left">Nivel</th>
+                <th class="px-3 py-2 text-left">Responsable</th>
+                <th class="px-3 py-2 text-left">Mitigación</th>
+                <th class="px-3 py-2 text-left">Estado</th>
+                <th class="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- MINUTES & ACTIONS -->
+      <section id="view-minutes" class="view space-y-6">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-navy text-lg">Minutas de Reunión</h2>
+          <button data-add="minutes" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">+ Nueva Minuta</button>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table class="min-w-full text-xs" id="tableMinutes">
+            <thead class="bg-navy text-white">
+              <tr>
+                <th class="px-3 py-2 text-left">Fecha</th>
+                <th class="px-3 py-2 text-left">Tipo</th>
+                <th class="px-3 py-2 text-left">Tema</th>
+                <th class="px-3 py-2 text-left">Decisiones</th>
+                <th class="px-3 py-2 text-left">Acciones Acordadas</th>
+                <th class="px-3 py-2 text-left">Responsable</th>
+                <th class="px-3 py-2 text-left">Estado</th>
+                <th class="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-navy text-lg">Acciones</h2>
+          <button data-add="actions" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">+ Nueva Acción</button>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table class="min-w-full text-xs" id="tableActions">
+            <thead class="bg-navy text-white">
+              <tr>
+                <th class="px-3 py-2 text-left">Acción</th>
+                <th class="px-3 py-2 text-left">Etapa</th>
+                <th class="px-3 py-2 text-left">Responsable</th>
+                <th class="px-3 py-2 text-left">Prioridad</th>
+                <th class="px-3 py-2 text-left">Compromiso</th>
+                <th class="px-3 py-2 text-left">Estado</th>
+                <th class="px-3 py-2 text-left w-32">Avance</th>
+                <th class="px-3 py-2 text-left">Origen</th>
+                <th class="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- KPIS -->
+      <section id="view-kpis" class="view space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-navy text-lg">KPIs Logísticos</h2>
+          <button data-add="kpis" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">+ Nuevo KPI</button>
+        </div>
+        <div id="kpiCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        <div class="bg-white rounded-xl shadow-sm p-4">
+          <h3 class="font-semibold text-navy mb-2 text-sm">Inicial vs Actual vs Objetivo</h3>
+          <canvas id="chartKpis" height="240"></canvas>
+        </div>
+      </section>
+
+      <!-- BEFORE / AFTER -->
+      <section id="view-beforeafter" class="view space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-navy text-lg">Antes vs Después</h2>
+          <button data-add="before_after" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">+ Nuevo Indicador</button>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table class="min-w-full text-xs" id="tableBeforeAfter">
+            <thead class="bg-navy text-white">
+              <tr>
+                <th class="px-3 py-2 text-left">Área</th>
+                <th class="px-3 py-2 text-left">Indicador</th>
+                <th class="px-3 py-2 text-left">Unidad</th>
+                <th class="px-3 py-2 text-left">Inicial</th>
+                <th class="px-3 py-2 text-left">Final</th>
+                <th class="px-3 py-2 text-left">Mejora</th>
+                <th class="px-3 py-2 text-left">Observaciones</th>
+                <th class="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TEAM -->
+      <section id="view-team" class="view space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-navy text-lg">Equipo</h2>
+          <button data-add="team_members" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">+ Nuevo Integrante</button>
+        </div>
+        <div id="teamCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   CDI Consultoría — SPA (Vanilla JS, sin build step)
+   ========================================================= */
+
+const STORAGE_KEY = 'cdi_pm_state_v1';
+const MODE_KEY = 'cdi_pm_mode';
+let API_BASE = '/api'; // ajustar si el backend vive en otro dominio (Render)
+
+const state = {
+  mode: localStorage.getItem(MODE_KEY) || 'demo',
+  config: null,
+  tasks: [], plan_stages: [], risks: [], minutes: [], actions: [],
+  kpis: [], before_after: [], team_members: [],
+  dirty: false
+};
+
+const TABLE_ENDPOINT = {
+  tasks: 'tasks', plan_stages: 'plan-stages', risks: 'risks', minutes: 'minutes',
+  actions: 'actions', kpis: 'kpis', before_after: 'before-after', team_members: 'team'
+};
+
+/* ---------------- Demo data (fallback offline / modo demo) ---------------- */
+const DEMO_DATA = {
+  config: { project_name: 'Optimización de Almacenes e Inventarios — Planta Norte', client_name: 'Distribuidora Andina S.A.', start_date: '2026-02-02', end_date: '2026-07-10', status: 'En proceso' },
+  tasks: [
+    { id: 1, stage: 'Diagnóstico', activity: 'Kickoff y relevamiento inicial', responsible: 'Gustavo Zaltzman', priority: 'Alta', start_date: '2026-02-02', end_date: '2026-02-04', status: 'Finalizado', progress: 100 },
+    { id: 2, stage: 'Diagnóstico', activity: 'Relevamiento de layout de almacén', responsible: 'Equipo CDI', priority: 'Media', start_date: '2026-02-05', end_date: '2026-02-10', status: 'Finalizado', progress: 100 },
+    { id: 3, stage: 'Diagnóstico', activity: 'Análisis de flujo de picking', responsible: 'Equipo CDI', priority: 'Alta', start_date: '2026-02-10', end_date: '2026-02-17', status: 'Finalizado', progress: 100 },
+    { id: 4, stage: 'Diseño', activity: 'Rediseño de layout de almacén', responsible: 'Consultor Senior', priority: 'Crítica', start_date: '2026-02-25', end_date: '2026-03-10', status: 'Finalizado', progress: 100 },
+    { id: 5, stage: 'Diseño', activity: 'Diseño de proceso de picking', responsible: 'Equipo CDI', priority: 'Alta', start_date: '2026-03-10', end_date: '2026-03-18', status: 'En proceso', progress: 80 },
+    { id: 6, stage: 'Diseño', activity: 'Especificación funcional de WMS', responsible: 'Analista TI', priority: 'Alta', start_date: '2026-03-15', end_date: '2026-03-25', status: 'En proceso', progress: 60 },
+    { id: 7, stage: 'Implementación', activity: 'Selección de proveedor de WMS', responsible: 'Analista TI', priority: 'Alta', start_date: '2026-03-28', end_date: '2026-04-10', status: 'No iniciado', progress: 0 },
+    { id: 8, stage: 'Implementación', activity: 'Reconfiguración física de racks', responsible: 'Contratista Obra', priority: 'Crítica', start_date: '2026-04-01', end_date: '2026-04-20', status: 'No iniciado', progress: 0 },
+    { id: 9, stage: 'Capacitación', activity: 'Capacitación a operarios', responsible: 'Consultor Senior', priority: 'Alta', start_date: '2026-06-05', end_date: '2026-06-15', status: 'No iniciado', progress: 0 },
+    { id: 10, stage: 'Cierre', activity: 'Go-live general', responsible: 'Gustavo Zaltzman', priority: 'Crítica', start_date: '2026-06-20', end_date: '2026-06-22', status: 'No iniciado', progress: 0 }
+  ],
+  plan_stages: [
+    { id: 1, stage: 'Diagnóstico', activity_id: 'D-1', activity: 'Kickoff del proyecto', description: 'Reunión de arranque y alineación', deliverable: 'Acta de inicio', estimated_duration: '3 días', dependencies: '', completed: true },
+    { id: 2, stage: 'Diagnóstico', activity_id: 'D-2', activity: 'Relevamiento operativo', description: 'Levantamiento de procesos in situ', deliverable: 'Informe de relevamiento', estimated_duration: '2 semanas', dependencies: 'D-1', completed: true },
+    { id: 3, stage: 'Diseño', activity_id: 'E-1', activity: 'Diseño de solución logística', description: 'Layout, slotting y procesos objetivo', deliverable: 'Documento de diseño', estimated_duration: '3 semanas', dependencies: 'D-2', completed: true },
+    { id: 4, stage: 'Diseño', activity_id: 'E-2', activity: 'Especificación de sistema', description: 'Requerimientos funcionales de WMS', deliverable: 'Especificación funcional', estimated_duration: '2 semanas', dependencies: 'E-1', completed: false },
+    { id: 5, stage: 'Implementación', activity_id: 'I-1', activity: 'Adecuación física', description: 'Obra civil y reconfiguración de racks', deliverable: 'Almacén reconfigurado', estimated_duration: '3 semanas', dependencies: 'E-2', completed: false },
+    { id: 6, stage: 'Capacitación', activity_id: 'C-1', activity: 'Formación de equipos', description: 'Capacitación a supervisores y operarios', deliverable: 'Personal certificado', estimated_duration: '3 semanas', dependencies: 'I-1', completed: false },
+    { id: 7, stage: 'Cierre', activity_id: 'Z-1', activity: 'Puesta en marcha', description: 'Go-live general', deliverable: 'Almacén operativo', estimated_duration: '3 días', dependencies: 'I-1', completed: false }
+  ],
+  risks: [
+    { id: 1, risk: 'Resistencia al cambio del personal de piso', category: 'Organizacional', probability: 'Alta', impact: 'Alto', level: 'CRÍTICO', responsible: 'Consultor Senior', mitigation: 'Plan de comunicación y capacitación temprana', status: 'Activo' },
+    { id: 2, risk: 'Demoras en la obra civil de racks', category: 'Operativo', probability: 'Media', impact: 'Alto', level: 'CRÍTICO', responsible: 'Contratista Obra', mitigation: 'Cronograma con holguras', status: 'Activo' },
+    { id: 3, risk: 'Errores en migración de datos maestros', category: 'Tecnológico', probability: 'Media', impact: 'Alto', level: 'CRÍTICO', responsible: 'Analista TI', mitigation: 'Pruebas en staging', status: 'Activo' },
+    { id: 4, risk: 'Falta de disponibilidad del proveedor de WMS', category: 'Proveedores', probability: 'Baja', impact: 'Alto', level: 'MEDIO', responsible: 'Analista TI', mitigation: 'SLA y penalidades', status: 'Activo' },
+    { id: 5, risk: 'Interrupción de operaciones durante el piloto', category: 'Operativo', probability: 'Media', impact: 'Medio', level: 'MEDIO', responsible: 'Equipo CDI', mitigation: 'Piloto en baja demanda', status: 'Mitigado' }
+  ],
+  minutes: [
+    { id: 1, meeting_date: '2026-02-02', meeting_type: 'Kickoff', topic: 'Arranque del proyecto', decisions: 'Se aprueba alcance y cronograma', actions: 'Enviar plan de relevamiento', responsible: 'Gustavo Zaltzman', status: 'Cerrada' },
+    { id: 2, meeting_date: '2026-02-24', meeting_type: 'Revisión', topic: 'Presentación de hallazgos', decisions: 'Se aprueba el diagnóstico', actions: 'Iniciar etapa de diseño', responsible: 'Consultor Senior', status: 'Cerrada' },
+    { id: 3, meeting_date: '2026-03-20', meeting_type: 'Seguimiento', topic: 'Avance de diseño', decisions: 'Adelantar especificación de WMS', actions: 'Priorizar especificación de WMS', responsible: 'Analista TI', status: 'En curso' }
+  ],
+  actions: [
+    { id: 1, action_name: 'Enviar plan detallado de relevamiento', stage: 'Diagnóstico', responsible: 'Gustavo Zaltzman', priority: 'Alta', commitment_date: '2026-02-05', status: 'Cerrada', progress: 100, origin: 'Minuta' },
+    { id: 2, action_name: 'Priorizar especificación de WMS', stage: 'Diseño', responsible: 'Analista TI', priority: 'Crítica', commitment_date: '2026-03-25', status: 'En curso', progress: 60, origin: 'Minuta' },
+    { id: 3, action_name: 'Contactar proveedores alternativos de WMS', stage: 'Diseño', responsible: 'Analista TI', priority: 'Media', commitment_date: '2026-03-30', status: 'No iniciada', progress: 0, origin: 'Gestión de riesgos' }
+  ],
+  kpis: [
+    { id: 1, category: 'Precisión de Inventario', indicator: 'Exactitud de Inventario (ERI)', unit: '%', initial_value: 82, target_value: 98, current_value: 85.5, responsible: 'Consultor Senior' },
+    { id: 2, category: 'Productividad', indicator: 'Unidades por Hora (UPH)', unit: 'uds/h', initial_value: 45, target_value: 75, current_value: 52, responsible: 'Equipo CDI' },
+    { id: 3, category: 'Tiempos', indicator: 'Tiempo promedio de recepción', unit: 'min/pallet', initial_value: 38, target_value: 15, current_value: 32, responsible: 'Equipo CDI' },
+    { id: 4, category: 'Calidad', indicator: 'Tasa de errores de picking', unit: '%', initial_value: 3.2, target_value: 0.5, current_value: 2.6, responsible: 'Consultor Senior' },
+    { id: 5, category: 'Servicio', indicator: 'Nivel de servicio (OTIF)', unit: '%', initial_value: 88, target_value: 97, current_value: 90, responsible: 'Gerente de Operaciones' },
+    { id: 6, category: 'Ocupación', indicator: 'Utilización de espacio', unit: '%', initial_value: 61, target_value: 85, current_value: 66, responsible: 'Consultor Senior' }
+  ],
+  before_after: [
+    { id: 1, area: 'Inventario', indicator: 'Exactitud de Inventario (ERI)', unit: '%', initial_value: 82, final_value: null, observations: 'Medición final pendiente' },
+    { id: 2, area: 'Picking', indicator: 'Unidades por Hora (UPH)', unit: 'uds/h', initial_value: 45, final_value: null, observations: 'Se medirá post go-live' },
+    { id: 3, area: 'Recepción', indicator: 'Tiempo promedio de recepción', unit: 'min/pallet', initial_value: 38, final_value: null, observations: '' }
+  ],
+  team_members: [
+    { id: 1, name: 'Gustavo Zaltzman', role: 'Director de Proyecto', email: 'gustavo.zaltzman@cdiconsultoria.com', color: '#1e3a5f' },
+    { id: 2, name: 'Consultor Senior', role: 'Consultor Senior de Logística', email: 'consultor.senior@cdiconsultoria.com', color: '#38a169' },
+    { id: 3, name: 'Analista TI', role: 'Analista de Sistemas', email: 'analista.ti@cdiconsultoria.com', color: '#d69e2e' },
+    { id: 4, name: 'Gerente de Operaciones', role: 'Sponsor del Cliente', email: 'operaciones@cliente.com', color: '#2c5282' }
+  ]
+};
+
+/* ---------------- Persistencia local ---------------- */
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { console.warn('LocalStorage inválido, usando demo', e); }
+  return JSON.parse(JSON.stringify(DEMO_DATA));
+}
+function saveLocal() {
+  const snapshot = {};
+  Object.keys(TABLE_ENDPOINT).forEach((t) => snapshot[t] = state[t]);
+  snapshot.config = state.config;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+}
+
+/* ---------------- Indicador de sincronización ---------------- */
+function setSync(status) {
+  // status: 'synced' | 'local' | 'offline'
+  const dot = document.getElementById('syncDot');
+  const label = document.getElementById('syncLabel');
+  const map = {
+    synced: ['bg-green-500', 'Sincronizado'],
+    local: ['bg-amber', 'Guardado Local'],
+    offline: ['bg-red-500', 'Sin Conexión']
+  };
+  dot.className = 'w-2 h-2 rounded-full ' + map[status][0];
+  label.textContent = map[status][1];
+}
+
+/* ---------------- Capa de datos (API con fallback local / demo) ---------------- */
+async function apiCall(path, options) {
+  const res = await fetch(API_BASE + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+async function fetchAll() {
+  if (state.mode === 'demo') {
+    Object.assign(state, loadLocal());
+    setSync('local');
+    return;
+  }
+  try {
+    const endpoints = Object.entries(TABLE_ENDPOINT);
+    const [cfg, ...rest] = await Promise.all([
+      apiCall('/config'),
+      ...endpoints.map(([, ep]) => apiCall('/' + ep))
+    ]);
+    state.config = cfg.data;
+    endpoints.forEach(([key], i) => state[key] = rest[i].data);
+    saveLocal();
+    setSync('synced');
+  } catch (e) {
+    console.warn('API no disponible, usando último snapshot local', e);
+    Object.assign(state, loadLocal());
+    setSync('offline');
+  }
+}
+
+async function persist(table, id, patch, isNew, localArray, localRecord) {
+  saveLocal();
+  if (state.mode === 'demo') { setSync('local'); return; }
+  try {
+    if (isNew) {
+      const res = await apiCall('/' + TABLE_ENDPOINT[table], { method: 'POST', body: JSON.stringify(patch) });
+      Object.assign(localRecord, res.data); // reemplaza id temporal por el real
+    } else {
+      await apiCall(`/${TABLE_ENDPOINT[table]}/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    }
+    saveLocal();
+    setSync('synced');
+  } catch (e) {
+    console.warn('Sin conexión, cambio guardado localmente', e);
+    setSync('offline');
+  }
+}
+
+async function removeRecord(table, id) {
+  state[table] = state[table].filter((r) => r.id !== id);
+  saveLocal();
+  render();
+  if (state.mode === 'demo') { setSync('local'); return; }
+  try {
+    await apiCall(`/${TABLE_ENDPOINT[table]}/${id}`, { method: 'DELETE' });
+    setSync('synced');
+  } catch (e) {
+    setSync('offline');
+  }
+}
+
+function nextTempId(table) {
+  const ids = state[table].map((r) => r.id).filter((n) => typeof n === 'number');
+  return (ids.length ? Math.max(...ids) : 0) + 1;
+}
+
+/* ---------------- Utilidades ---------------- */
+function fmtDate(d) { return d ? d : '-'; }
+function statusColor(status) {
+  return {
+    'No iniciado': 'bg-gray-100 text-gray-700', 'No iniciada': 'bg-gray-100 text-gray-700',
+    'En proceso': 'bg-blue-100 text-blue-700', 'En curso': 'bg-blue-100 text-blue-700',
+    'Bloqueado': 'bg-red-100 text-red-700', 'Bloqueada': 'bg-red-100 text-red-700',
+    'Finalizado': 'bg-green-100 text-green-700', 'Cerrada': 'bg-green-100 text-green-700',
+    'Pendiente': 'bg-amber-100 text-amber-800', 'Activo': 'bg-red-100 text-red-700',
+    'Mitigado': 'bg-amber-100 text-amber-800', 'Cerrado': 'bg-green-100 text-green-700'
+  }[status] || 'bg-gray-100 text-gray-700';
+}
+function priorityColor(p) {
+  return { 'Baja': 'text-gray-500', 'Media': 'text-blue-600', 'Alta': 'text-amber-600', 'Crítica': 'text-red-600' }[p] || '';
+}
+function riskLevelColor(l) {
+  return { 'BAJO': 'bg-green-100 text-green-700', 'MEDIO': 'bg-amber-100 text-amber-800', 'CRÍTICO': 'bg-red-100 text-red-700' }[l] || '';
+}
+const STATUS_OPTIONS_TASK = ['No iniciado', 'En proceso', 'Bloqueado', 'Finalizado'];
+const STATUS_OPTIONS_ACTION = ['No iniciada', 'En curso', 'Bloqueada', 'Cerrada'];
+const PRIORITY_OPTIONS = ['Baja', 'Media', 'Alta', 'Crítica'];
+
+function selectHTML(options, current, field, table, id) {
+  return `<select data-edit-select data-table="${table}" data-id="${id}" data-field="${field}" class="text-xs border rounded px-1 py-0.5 bg-white">
+    ${options.map((o) => `<option value="${o}" ${o === current ? 'selected' : ''}>${o}</option>`).join('')}
+  </select>`;
+}
+function editableCell(value, field, table, id, extraClass = '') {
+  return `<td class="px-3 py-2 cell-editable ${extraClass}" contenteditable="true" data-table="${table}" data-id="${id}" data-field="${field}">${value ?? ''}</td>`;
+}
+function progressBar(value) {
+  const v = Number(value) || 0;
+  const color = v >= 100 ? 'bg-brandgreen' : v >= 50 ? 'bg-amber' : 'bg-navy-light';
+  return `<div class="flex items-center gap-2">
+    <div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden"><div class="h-full ${color}" style="width:${Math.min(v,100)}%"></div></div>
+    <span contenteditable="true" data-table="tasks" data-field="progress" class="text-xs w-9 text-right cell-editable">${v}</span>
+  </div>`;
+}
+
+/* ---------------- Render: Dashboard ---------------- */
+let chartStatus, chartStage, chartKpis;
+function renderDashboard() {
+  document.getElementById('headerProjectName').textContent = state.config?.project_name || '—';
+  document.getElementById('headerClientName').textContent = state.config?.client_name || '—';
+
+  const tasks = state.tasks;
+  const total = tasks.length;
+  const avg = total ? (tasks.reduce((s, t) => s + Number(t.progress || 0), 0) / total).toFixed(1) : '0.0';
+  document.getElementById('kpiOverallProgress').textContent = avg + '%';
+  document.getElementById('kpiTotalTasks').textContent = total;
+  document.getElementById('kpiActiveRisks').textContent = state.risks.filter(r => r.status === 'Activo').length;
+
+  let daysRemaining = '—';
+  if (state.config?.end_date) {
+    const diff = Math.ceil((new Date(state.config.end_date) - new Date()) / 86400000);
+    daysRemaining = diff;
+  }
+  document.getElementById('kpiDaysRemaining').textContent = daysRemaining;
+
+  const byStatus = {};
+  tasks.forEach(t => byStatus[t.status] = (byStatus[t.status] || 0) + 1);
+  const stageMap = {};
+  tasks.forEach(t => {
+    stageMap[t.stage] = stageMap[t.stage] || { total: 0, sum: 0 };
+    stageMap[t.stage].total++;
+    stageMap[t.stage].sum += Number(t.progress || 0);
+  });
+
+  const statusCtx = document.getElementById('chartStatus');
+  if (chartStatus) chartStatus.destroy();
+  chartStatus = new Chart(statusCtx, {
+    type: 'pie',
+    data: {
+      labels: Object.keys(byStatus),
+      datasets: [{ data: Object.values(byStatus), backgroundColor: ['#a0aec0', '#2c5282', '#e53e3e', '#38a169'] }]
+    },
+    options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
+  });
+
+  const stageCtx = document.getElementById('chartStage');
+  if (chartStage) chartStage.destroy();
+  const stageLabels = Object.keys(stageMap);
+  chartStage = new Chart(stageCtx, {
+    type: 'bar',
+    data: {
+      labels: stageLabels,
+      datasets: [{ label: '% Avance', data: stageLabels.map(s => (stageMap[s].sum / stageMap[s].total).toFixed(1)), backgroundColor: '#1e3a5f' }]
+    },
+    options: { scales: { y: { beginAtZero: true, max: 100 } }, plugins: { legend: { display: false } } }
+  });
+}
+
+/* ---------------- Render: Gantt (tasks) ---------------- */
+function renderTasks() {
+  const tbody = document.querySelector('#tableTasks tbody');
+  tbody.innerHTML = state.tasks.map(t => `
+    <tr class="border-b hover:bg-gray-50">
+      ${editableCell(t.stage, 'stage', 'tasks', t.id)}
+      ${editableCell(t.activity, 'activity', 'tasks', t.id, 'font-medium')}
+      ${editableCell(t.responsible, 'responsible', 'tasks', t.id)}
+      <td class="px-3 py-2 ${priorityColor(t.priority)} font-medium">${selectHTML(PRIORITY_OPTIONS, t.priority, 'priority', 'tasks', t.id)}</td>
+      ${editableCell(t.start_date, 'start_date', 'tasks', t.id)}
+      ${editableCell(t.end_date, 'end_date', 'tasks', t.id)}
+      <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-[11px] ${statusColor(t.status)}">${selectHTML(STATUS_OPTIONS_TASK, t.status, 'status', 'tasks', t.id)}</span></td>
+      <td class="px-3 py-2">${progressBarFor(t)}</td>
+      <td class="px-3 py-2"><button data-del="tasks" data-id="${t.id}" class="text-red-400 hover:text-red-600">✕</button></td>
+    </tr>
+  `).join('') || emptyRow(9);
+}
+function progressBarFor(t) {
+  const v = Number(t.progress) || 0;
+  const color = v >= 100 ? 'bg-brandgreen' : v >= 50 ? 'bg-amber' : 'bg-navy-light';
+  return `<div class="flex items-center gap-2">
+    <div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden"><div class="h-full ${color}" style="width:${Math.min(v,100)}%"></div></div>
+    <span contenteditable="true" data-table="tasks" data-id="${t.id}" data-field="progress" class="text-xs w-9 text-right cell-editable">${v}</span>
+  </div>`;
+}
+function emptyRow(cols) { return `<tr><td colspan="${cols}" class="px-3 py-6 text-center text-gray-400">Sin registros. Usá "+ Nuevo" para agregar.</td></tr>`; }
+
+/* ---------------- Render: Plan CDI ---------------- */
+function renderPlan() {
+  const groups = {};
+  state.plan_stages.forEach(p => { groups[p.stage] = groups[p.stage] || []; groups[p.stage].push(p); });
+  const container = document.getElementById('planTree');
+  container.innerHTML = Object.entries(groups).map(([stage, items]) => {
+    const done = items.filter(i => i.completed).length;
+    return `
+    <div class="bg-white rounded-xl shadow-sm">
+      <div class="px-4 py-3 border-b flex items-center justify-between">
+        <h3 class="font-semibold text-navy text-sm">${stage}</h3>
+        <span class="text-xs text-gray-500">${done}/${items.length} completadas</span>
+      </div>
+      <div class="divide-y">
+        ${items.map(i => `
+          <div class="px-4 py-2.5 flex items-start gap-3 text-sm">
+            <input type="checkbox" data-plan-toggle data-id="${i.id}" ${i.completed ? 'checked' : ''} class="mt-1 accent-brandgreen">
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-mono text-gray-400">${i.activity_id}</span>
+                <span class="cell-editable font-medium" contenteditable="true" data-table="plan_stages" data-id="${i.id}" data-field="activity">${i.activity}</span>
+              </div>
+              <p class="text-xs text-gray-500 mt-0.5 cell-editable" contenteditable="true" data-table="plan_stages" data-id="${i.id}" data-field="description">${i.description || ''}</p>
+              <p class="text-[11px] text-gray-400 mt-0.5">Entregable: ${i.deliverable || '-'} · Duración: ${i.estimated_duration || '-'} ${i.dependencies ? '· Depende de: ' + i.dependencies : ''}</p>
+            </div>
+            <button data-del="plan_stages" data-id="${i.id}" class="text-red-400 hover:text-red-600">✕</button>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('') || `<p class="text-gray-400 text-sm">Sin actividades definidas.</p>`;
+}
+
+/* ---------------- Render: Risks ---------------- */
+function renderRisks() {
+  const tbody = document.querySelector('#tableRisks tbody');
+  tbody.innerHTML = state.risks.map(r => `
+    <tr class="border-b hover:bg-gray-50">
+      ${editableCell(r.risk, 'risk', 'risks', r.id, 'font-medium')}
+      ${editableCell(r.category, 'category', 'risks', r.id)}
+      <td class="px-3 py-2">${selectHTML(['Baja', 'Media', 'Alta'], r.probability, 'probability', 'risks', r.id)}</td>
+      <td class="px-3 py-2">${selectHTML(['Bajo', 'Medio', 'Alto'], r.impact, 'impact', 'risks', r.id)}</td>
+      <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-semibold ${riskLevelColor(r.level)}">${r.level}</span></td>
+      ${editableCell(r.responsible, 'responsible', 'risks', r.id)}
+      ${editableCell(r.mitigation, 'mitigation', 'risks', r.id)}
+      <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-[11px] ${statusColor(r.status)}">${selectHTML(['Activo', 'Mitigado', 'Cerrado'], r.status, 'status', 'risks', r.id)}</span></td>
+      <td class="px-3 py-2"><button data-del="risks" data-id="${r.id}" class="text-red-400 hover:text-red-600">✕</button></td>
+    </tr>
+  `).join('') || emptyRow(9);
+}
+
+/* ---------------- Render: Minutes & Actions ---------------- */
+function renderMinutes() {
+  const tbody = document.querySelector('#tableMinutes tbody');
+  tbody.innerHTML = state.minutes.map(m => `
+    <tr class="border-b hover:bg-gray-50">
+      ${editableCell(m.meeting_date, 'meeting_date', 'minutes', m.id)}
+      ${editableCell(m.meeting_type, 'meeting_type', 'minutes', m.id)}
+      ${editableCell(m.topic, 'topic', 'minutes', m.id, 'font-medium')}
+      ${editableCell(m.decisions, 'decisions', 'minutes', m.id)}
+      ${editableCell(m.actions, 'actions', 'minutes', m.id)}
+      ${editableCell(m.responsible, 'responsible', 'minutes', m.id)}
+      <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-[11px] ${statusColor(m.status)}">${selectHTML(['Pendiente', 'En curso', 'Cerrada'], m.status, 'status', 'minutes', m.id)}</span></td>
+      <td class="px-3 py-2 flex gap-2">
+        <button data-convert="${m.id}" title="Convertir a Acción" class="text-amber hover:text-amber-700">↪ Acción</button>
+        <button data-del="minutes" data-id="${m.id}" class="text-red-400 hover:text-red-600">✕</button>
+      </td>
+    </tr>
+  `).join('') || emptyRow(8);
+}
+function renderActions() {
+  const tbody = document.querySelector('#tableActions tbody');
+  tbody.innerHTML = state.actions.map(a => `
+    <tr class="border-b hover:bg-gray-50">
+      ${editableCell(a.action_name, 'action_name', 'actions', a.id, 'font-medium')}
+      ${editableCell(a.stage, 'stage', 'actions', a.id)}
+      ${editableCell(a.responsible, 'responsible', 'actions', a.id)}
+      <td class="px-3 py-2 ${priorityColor(a.priority)} font-medium">${selectHTML(PRIORITY_OPTIONS, a.priority, 'priority', 'actions', a.id)}</td>
+      ${editableCell(a.commitment_date, 'commitment_date', 'actions', a.id)}
+      <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-[11px] ${statusColor(a.status)}">${selectHTML(STATUS_OPTIONS_ACTION, a.status, 'status', 'actions', a.id)}</span></td>
+      <td class="px-3 py-2">${progressBarAction(a)}</td>
+      ${editableCell(a.origin, 'origin', 'actions', a.id)}
+      <td class="px-3 py-2"><button data-del="actions" data-id="${a.id}" class="text-red-400 hover:text-red-600">✕</button></td>
+    </tr>
+  `).join('') || emptyRow(9);
+}
+function progressBarAction(a) {
+  const v = Number(a.progress) || 0;
+  const color = v >= 100 ? 'bg-brandgreen' : v >= 50 ? 'bg-amber' : 'bg-navy-light';
+  return `<div class="flex items-center gap-2">
+    <div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden"><div class="h-full ${color}" style="width:${Math.min(v,100)}%"></div></div>
+    <span contenteditable="true" data-table="actions" data-id="${a.id}" data-field="progress" class="text-xs w-9 text-right cell-editable">${v}</span>
+  </div>`;
+}
+
+/* ---------------- Render: KPIs ---------------- */
+function renderKpis() {
+  const container = document.getElementById('kpiCards');
+  container.innerHTML = state.kpis.map(k => {
+    const gap = (Number(k.target_value) - Number(k.current_value)).toFixed(1);
+    const progressToTarget = k.target_value == k.initial_value ? 100 :
+      Math.min(100, Math.max(0, ((k.current_value - k.initial_value) / (k.target_value - k.initial_value)) * 100)).toFixed(0);
+    // "Mejora" depende de si el objetivo es mayor (subir) o menor (bajar) que el valor inicial.
+    const higherIsBetter = Number(k.target_value) >= Number(k.initial_value);
+    const improved = higherIsBetter ? Number(k.current_value) >= Number(k.initial_value) : Number(k.current_value) <= Number(k.initial_value);
+    const trendArrow = Number(k.current_value) >= Number(k.initial_value) ? '▲' : '▼';
+    return `
+    <div class="bg-white rounded-xl shadow-sm p-4 space-y-2">
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="text-[11px] text-gray-400">${k.category}</p>
+          <p class="font-semibold text-navy text-sm cell-editable" contenteditable="true" data-table="kpis" data-id="${k.id}" data-field="indicator">${k.indicator}</p>
+        </div>
+        <button data-del="kpis" data-id="${k.id}" class="text-red-300 hover:text-red-600 text-xs">✕</button>
+      </div>
+      <div class="flex items-end gap-2">
+        <span class="text-2xl font-bold text-navy" contenteditable="true" data-table="kpis" data-id="${k.id}" data-field="current_value">${k.current_value}</span>
+        <span class="text-xs text-gray-400">${k.unit} · objetivo ${k.target_value}${k.unit}</span>
+      </div>
+      <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden"><div class="h-full bg-brandgreen" style="width:${progressToTarget}%"></div></div>
+      <p class="text-[11px] ${improved ? 'text-green-600' : 'text-red-500'}">${trendArrow} desde ${k.initial_value}${k.unit} · brecha ${gap}${k.unit}</p>
+      <p class="text-[11px] text-gray-400">Resp: ${k.responsible || '-'}</p>
+    </div>`;
+  }).join('') || `<p class="text-gray-400 text-sm">Sin KPIs definidos.</p>`;
+
+  const ctx = document.getElementById('chartKpis');
+  if (chartKpis) chartKpis.destroy();
+  chartKpis = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: state.kpis.map(k => k.indicator),
+      datasets: [
+        { label: 'Inicial', data: state.kpis.map(k => k.initial_value), backgroundColor: '#a0aec0' },
+        { label: 'Actual', data: state.kpis.map(k => k.current_value), backgroundColor: '#1e3a5f' },
+        { label: 'Objetivo', data: state.kpis.map(k => k.target_value), backgroundColor: '#38a169' }
+      ]
+    },
+    options: { scales: { x: { ticks: { font: { size: 10 } } } }, plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+/* ---------------- Render: Before/After ---------------- */
+function renderBeforeAfter() {
+  const tbody = document.querySelector('#tableBeforeAfter tbody');
+  tbody.innerHTML = state.before_after.map(b => {
+    const hasFinal = b.final_value !== null && b.final_value !== undefined && b.final_value !== '';
+    const improvement = hasFinal && Number(b.initial_value) !== 0
+      ? (((Number(b.final_value) - Number(b.initial_value)) / Number(b.initial_value)) * 100).toFixed(1) + '%'
+      : '—';
+    const improvementColor = hasFinal ? (Number(improvement) >= 0 ? 'text-green-600' : 'text-red-500') : 'text-gray-400';
+    return `
+    <tr class="border-b hover:bg-gray-50">
+      ${editableCell(b.area, 'area', 'before_after', b.id, 'font-medium')}
+      ${editableCell(b.indicator, 'indicator', 'before_after', b.id)}
+      ${editableCell(b.unit, 'unit', 'before_after', b.id)}
+      ${editableCell(b.initial_value, 'initial_value', 'before_after', b.id)}
+      ${editableCell(b.final_value ?? '', 'final_value', 'before_after', b.id)}
+      <td class="px-3 py-2 font-semibold ${improvementColor}">${improvement}</td>
+      ${editableCell(b.observations, 'observations', 'before_after', b.id)}
+      <td class="px-3 py-2"><button data-del="before_after" data-id="${b.id}" class="text-red-400 hover:text-red-600">✕</button></td>
+    </tr>`;
+  }).join('') || emptyRow(8);
+}
+
+/* ---------------- Render: Team ---------------- */
+function renderTeam() {
+  const container = document.getElementById('teamCards');
+  container.innerHTML = state.team_members.map(m => `
+    <div class="bg-white rounded-xl shadow-sm p-4 text-center space-y-2">
+      <div class="w-12 h-12 rounded-full mx-auto flex items-center justify-center text-white font-bold" style="background:${m.color || '#1e3a5f'}">
+        ${(m.name || '?').split(' ').map(w => w[0]).slice(0, 2).join('')}
+      </div>
+      <p class="font-medium text-sm cell-editable" contenteditable="true" data-table="team_members" data-id="${m.id}" data-field="name">${m.name}</p>
+      <p class="text-xs text-gray-500 cell-editable" contenteditable="true" data-table="team_members" data-id="${m.id}" data-field="role">${m.role || ''}</p>
+      <p class="text-[11px] text-gray-400 cell-editable" contenteditable="true" data-table="team_members" data-id="${m.id}" data-field="email">${m.email || ''}</p>
+      <button data-del="team_members" data-id="${m.id}" class="text-red-300 hover:text-red-600 text-xs">Eliminar</button>
+    </div>
+  `).join('') || `<p class="text-gray-400 text-sm">Sin integrantes.</p>`;
+}
+
+/* ---------------- Render orquestador ---------------- */
+function render() {
+  renderDashboard();
+  renderTasks();
+  renderPlan();
+  renderRisks();
+  renderMinutes();
+  renderActions();
+  renderKpis();
+  renderBeforeAfter();
+  renderTeam();
+}
+
+/* ---------------- Edición inline (delegación de eventos) ---------------- */
+document.addEventListener('blur', (e) => {
+  const el = e.target;
+  if (!(el.matches && el.matches('[data-table][data-field][contenteditable]'))) return;
+  const { table, id, field } = el.dataset;
+  applyEdit(table, id, field, el.textContent.trim());
+}, true);
+
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.matches('[data-edit-select]')) {
+    const { table, id, field } = el.dataset;
+    applyEdit(table, id, field, el.value);
+  }
+  if (el.matches('[data-plan-toggle]')) {
+    applyEdit('plan_stages', el.dataset.id, 'completed', el.checked);
+  }
+});
+
+function applyEdit(table, id, field, value) {
+  const record = state[table].find(r => String(r.id) === String(id));
+  if (!record) return;
+  let v = value;
+  if (field === 'progress' && v !== '') v = Math.max(0, Math.min(100, Number(v) || 0));
+  record[field] = v;
+  persist(table, record.id, { [field]: v }, false, state[table], record);
+  render();
+}
+
+/* ---------------- Alta / Baja de registros ---------------- */
+const NEW_RECORD_DEFAULTS = {
+  tasks: () => ({ stage: 'Diagnóstico', activity: 'Nueva tarea', responsible: '', priority: 'Media', start_date: new Date().toISOString().slice(0, 10), end_date: new Date().toISOString().slice(0, 10), status: 'No iniciado', progress: 0 }),
+  plan_stages: () => ({ stage: 'Diagnóstico', activity_id: 'X-' + Date.now().toString().slice(-4), activity: 'Nueva actividad', description: '', deliverable: '', estimated_duration: '', dependencies: '', completed: false }),
+  risks: () => ({ risk: 'Nuevo riesgo', category: '', probability: 'Media', impact: 'Medio', level: 'MEDIO', responsible: '', mitigation: '', status: 'Activo' }),
+  minutes: () => ({ meeting_date: new Date().toISOString().slice(0, 10), meeting_type: '', topic: 'Nueva minuta', decisions: '', actions: '', responsible: '', status: 'Pendiente' }),
+  actions: () => ({ action_name: 'Nueva acción', stage: '', responsible: '', priority: 'Media', commitment_date: '', status: 'No iniciada', progress: 0, origin: 'Manual' }),
+  kpis: () => ({ category: 'General', indicator: 'Nuevo KPI', unit: '%', initial_value: 0, target_value: 100, current_value: 0, responsible: '' }),
+  before_after: () => ({ area: 'General', indicator: 'Nuevo indicador', unit: '', initial_value: 0, final_value: null, observations: '' }),
+  team_members: () => ({ name: 'Nuevo integrante', role: '', email: `nuevo${Date.now()}@cdiconsultoria.com`, color: '#1e3a5f' })
+};
+
+document.addEventListener('click', async (e) => {
+  const addBtn = e.target.closest('[data-add]');
+  if (addBtn) {
+    const table = addBtn.dataset.add;
+    const record = { id: nextTempId(table), ...NEW_RECORD_DEFAULTS[table]() };
+    state[table].push(record);
+    render();
+    await persist(table, record.id, NEW_RECORD_DEFAULTS[table](), true, state[table], record);
+    render();
+    return;
+  }
+  const delBtn = e.target.closest('[data-del]');
+  if (delBtn) {
+    if (!confirm('¿Eliminar este registro?')) return;
+    removeRecord(delBtn.dataset.del, isNaN(delBtn.dataset.id) ? delBtn.dataset.id : Number(delBtn.dataset.id));
+    return;
+  }
+  const convertBtn = e.target.closest('[data-convert]');
+  if (convertBtn) {
+    const minute = state.minutes.find(m => String(m.id) === String(convertBtn.dataset.convert));
+    if (!minute) return;
+    const record = {
+      id: nextTempId('actions'),
+      action_name: minute.actions || minute.topic,
+      description: '',
+      stage: '',
+      responsible: minute.responsible,
+      priority: 'Media',
+      commitment_date: minute.commitment_date || '',
+      status: 'No iniciada',
+      progress: 0,
+      origin: 'Minuta',
+      origin_minute_id: minute.id
+    };
+    state.actions.push(record);
+    render();
+    switchView('minutes');
+    await persist('actions', record.id, record, true, state.actions, record);
+  }
+});
+
+/* ---------------- Navegación ---------------- */
+function switchView(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + view).classList.add('active');
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.toggle('active', l.dataset.view === view));
+  if (view === 'dashboard') renderDashboard();
+  if (view === 'kpis') renderKpis();
+}
+document.querySelectorAll('.sidebar-link').forEach(link => {
+  link.addEventListener('click', () => switchView(link.dataset.view));
+});
+document.getElementById('btnToggleSidebar').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('w-64');
+  document.getElementById('sidebar').classList.toggle('w-0');
+});
+
+/* ---------------- Selector de modo ---------------- */
+const modeSelector = document.getElementById('modeSelector');
+modeSelector.value = state.mode;
+modeSelector.addEventListener('change', async () => {
+  state.mode = modeSelector.value;
+  localStorage.setItem(MODE_KEY, state.mode);
+  await fetchAll();
+  render();
+});
+
+/* ---------------- Exportar a Excel ---------------- */
+document.getElementById('btnExport').addEventListener('click', () => {
+  const wb = XLSX.utils.book_new();
+  Object.keys(TABLE_ENDPOINT).forEach((table) => {
+    const rows = state[table];
+    if (!rows || !rows.length) return;
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, table.slice(0, 31));
+  });
+  const name = (state.config?.project_name || 'proyecto').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
+  XLSX.writeFile(wb, `CDI_${name}_export.xlsx`);
+});
+
+/* ---------------- Init ---------------- */
+async function init() {
+  setSync('offline');
+  await fetchAll();
+  render();
+  window.addEventListener('online', () => { if (state.mode === 'production') fetchAll().then(render); });
+  window.addEventListener('offline', () => setSync('offline'));
+}
+init();
+</script>
+</body>
+</html>
