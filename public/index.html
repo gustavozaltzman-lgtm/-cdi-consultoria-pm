@@ -35,7 +35,28 @@
 </head>
 <body class="bg-panel text-gray-800 min-h-screen">
 
-<div id="app" class="flex h-screen overflow-hidden">
+<!-- LOGIN -->
+<div id="loginScreen" class="min-h-screen flex items-center justify-center bg-navy px-4">
+  <form id="loginForm" class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm space-y-4">
+    <div class="text-center space-y-1">
+      <div class="w-12 h-12 rounded-lg bg-amber flex items-center justify-center font-bold text-navy-dark mx-auto">CDI</div>
+      <h1 class="font-semibold text-navy text-lg">CDI Consultoría</h1>
+      <p class="text-xs text-gray-500">Gestión de Proyectos — Iniciar sesión</p>
+    </div>
+    <div>
+      <label class="text-xs font-medium text-gray-600">Email</label>
+      <input id="loginEmail" type="email" required autocomplete="username" class="mt-1 w-full border rounded-md px-3 py-2 text-sm">
+    </div>
+    <div>
+      <label class="text-xs font-medium text-gray-600">Contraseña</label>
+      <input id="loginPassword" type="password" required autocomplete="current-password" class="mt-1 w-full border rounded-md px-3 py-2 text-sm">
+    </div>
+    <p id="loginError" class="text-xs text-red-600 hidden"></p>
+    <button type="submit" id="loginSubmit" class="w-full bg-navy text-white text-sm font-medium py-2 rounded-md hover:bg-navy-light">Ingresar</button>
+  </form>
+</div>
+
+<div id="app" class="hidden h-screen overflow-hidden">
 
   <!-- SIDEBAR -->
   <aside id="sidebar" class="bg-navy text-white w-64 flex-shrink-0 flex flex-col transition-all duration-200 overflow-hidden">
@@ -72,6 +93,7 @@
         </div>
       </div>
       <div class="flex items-center gap-3 flex-wrap">
+        <select id="companySelector" class="hidden text-xs border rounded-md px-2 py-1.5 bg-gray-50 max-w-[180px]"></select>
         <select id="modeSelector" class="text-xs border rounded-md px-2 py-1.5 bg-gray-50">
           <option value="demo">Modo Demo (datos locales)</option>
           <option value="production">Modo Producción (API)</option>
@@ -81,6 +103,10 @@
           <span id="syncLabel">Inicializando…</span>
         </div>
         <button id="btnExport" class="text-xs font-medium bg-brandgreen text-white px-3 py-1.5 rounded-md hover:bg-green-700">⬇ Exportar Excel</button>
+        <div class="flex items-center gap-2 pl-2 border-l">
+          <span id="userBadge" class="text-xs text-gray-500"></span>
+          <button id="btnLogout" class="text-xs font-medium text-red-500 hover:text-red-700">Salir</button>
+        </div>
       </div>
     </header>
 
@@ -286,7 +312,86 @@
 
 const STORAGE_KEY = 'cdi_pm_state_v1';
 const MODE_KEY = 'cdi_pm_mode';
+const AUTH_KEY = 'cdi_pm_auth_v1';
 let API_BASE = '/api'; // ajustar si el backend vive en otro dominio (Render)
+
+/* ---------------- Autenticación / multi-empresa ---------------- */
+let auth = null;
+try { auth = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch (e) { auth = null; }
+let companies = [];         // solo se llena para role=admin
+let selectedCompanyId = null; // company_id efectivo de la sesión actual
+
+function saveAuth() { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); }
+function clearAuth() { auth = null; companies = []; selectedCompanyId = null; localStorage.removeItem(AUTH_KEY); }
+
+function authHeaders() {
+  return auth?.token ? { Authorization: 'Bearer ' + auth.token } : {};
+}
+
+// Agrega ?company_id=X a las requests de un admin (un client ya viene resuelto server-side por su token).
+function withCompanyParam(path) {
+  if (!auth || auth.user.role !== 'admin' || !selectedCompanyId) return path;
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}company_id=${selectedCompanyId}`;
+}
+
+function showLogin(message) {
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('app').classList.remove('flex');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  const err = document.getElementById('loginError');
+  if (message) { err.textContent = message; err.classList.remove('hidden'); }
+  else { err.classList.add('hidden'); }
+}
+function showApp() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('app').classList.add('flex');
+  const badge = document.getElementById('userBadge');
+  const companyLabel = auth.user.role === 'admin' ? 'Admin CDI' : (auth.user.company_name || 'Cliente');
+  badge.textContent = `${auth.user.name || auth.user.email} · ${companyLabel}`;
+}
+
+async function doLogin(email, password) {
+  const res = await fetch(API_BASE + '/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.success) throw new Error(body.error || 'No se pudo iniciar sesión');
+  auth = body.data;
+  saveAuth();
+
+  if (auth.user.role === 'admin') {
+    const list = await fetch(API_BASE + '/companies', { headers: authHeaders() }).then((r) => r.json());
+    companies = list.data || [];
+    selectedCompanyId = companies[0]?.id || null;
+    renderCompanySelector();
+  } else {
+    selectedCompanyId = auth.user.company_id;
+    document.getElementById('companySelector').classList.add('hidden');
+  }
+}
+
+function renderCompanySelector() {
+  const sel = document.getElementById('companySelector');
+  if (auth.user.role !== 'admin') { sel.classList.add('hidden'); return; }
+  sel.classList.remove('hidden');
+  sel.innerHTML = companies.map((c) => `<option value="${c.id}" ${c.id === selectedCompanyId ? 'selected' : ''}>${c.name}</option>`).join('');
+}
+
+function logout() {
+  clearAuth();
+  modeSelectorSetDemo();
+  showLogin();
+}
+function modeSelectorSetDemo() {
+  state.mode = 'demo';
+  localStorage.setItem(MODE_KEY, 'demo');
+  const sel = document.getElementById('modeSelector');
+  if (sel) sel.value = 'demo';
+}
 
 const state = {
   mode: localStorage.getItem(MODE_KEY) || 'demo',
@@ -394,10 +499,14 @@ function setSync(status) {
 
 /* ---------------- Capa de datos (API con fallback local / demo) ---------------- */
 async function apiCall(path, options) {
-  const res = await fetch(API_BASE + path, {
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetch(API_BASE + withCompanyParam(path), {
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     ...options
   });
+  if (res.status === 401) {
+    logout();
+    throw new Error('Sesión expirada, iniciá sesión de nuevo');
+  }
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
@@ -893,8 +1002,60 @@ document.getElementById('btnExport').addEventListener('click', () => {
   XLSX.writeFile(wb, `CDI_${name}_export.xlsx`);
 });
 
+/* ---------------- Login / Logout / Selector de empresa ---------------- */
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const btn = document.getElementById('loginSubmit');
+  btn.disabled = true; btn.textContent = 'Ingresando…';
+  try {
+    await doLogin(email, password);
+    state.mode = 'production';
+    localStorage.setItem(MODE_KEY, 'production');
+    modeSelector.value = 'production';
+    showApp();
+    setSync('offline');
+    await fetchAll();
+    render();
+  } catch (err) {
+    showLogin(err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Ingresar';
+  }
+});
+
+document.getElementById('btnLogout').addEventListener('click', () => logout());
+
+document.getElementById('companySelector').addEventListener('change', async (e) => {
+  selectedCompanyId = Number(e.target.value);
+  await fetchAll();
+  render();
+});
+
 /* ---------------- Init ---------------- */
 async function init() {
+  if (!auth || !auth.token) { showLogin(); return; }
+
+  try {
+    if (auth.user.role === 'admin') {
+      const res = await fetch(API_BASE + '/companies', { headers: authHeaders() });
+      if (!res.ok) throw new Error('401');
+      const list = await res.json();
+      companies = list.data || [];
+      selectedCompanyId = companies[0]?.id || null;
+      renderCompanySelector();
+    } else {
+      selectedCompanyId = auth.user.company_id;
+    }
+  } catch (e) {
+    clearAuth();
+    showLogin('Tu sesión expiró, iniciá sesión de nuevo.');
+    return;
+  }
+
+  modeSelector.value = state.mode;
+  showApp();
   setSync('offline');
   await fetchAll();
   render();
