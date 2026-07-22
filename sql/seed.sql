@@ -162,6 +162,6 @@ CROSS JOIN (VALUES
 ('Equipo CDI','Equipo de Campo','equipo@cdiconsultoria.com','#4a5568'),
 ('Gerente de Operaciones','Sponsor del Cliente','operaciones@cliente.com','#2c5282')
 ) AS v(name, role, email, color)
-ON CONFLICT (company_id, email) DO NOTHING;
+ON CONFLICT (company_id, email) WHERE email IS NOT NULL DO NOTHING;
 
 COMMIT;

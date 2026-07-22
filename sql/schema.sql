@@ -215,9 +215,10 @@ CREATE TABLE IF NOT EXISTS team_members (
   name        TEXT NOT NULL,
   role        TEXT,
   email       TEXT,
-  color       TEXT DEFAULT '#1e3a5f',
-  UNIQUE (company_id, email)
+  color       TEXT DEFAULT '#1e3a5f'
 );
 CREATE INDEX IF NOT EXISTS idx_team_members_company ON team_members(company_id);
+-- Único por empresa solo cuando hay email (permite integrantes sin email cargado).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_team_members_company_email ON team_members(company_id, email) WHERE email IS NOT NULL;
 
 COMMIT;
