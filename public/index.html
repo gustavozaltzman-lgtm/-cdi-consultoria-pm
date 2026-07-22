@@ -76,6 +76,7 @@
       <a data-view="kpis" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">📈 KPIs Logísticos</a>
       <a data-view="beforeafter" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">🔁 Antes vs Después</a>
       <a data-view="team" class="sidebar-link flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer">👥 Equipo</a>
+      <a data-view="companies" id="navCompanies" class="hidden sidebar-link gap-3 px-4 py-2.5 hover:bg-white/10 cursor-pointer border-t border-white/10 mt-2 pt-4">🏢 Empresas</a>
     </nav>
     <div class="p-3 border-t border-white/10 text-xs text-white/50">v1.0 · CDI Consultoría</div>
   </aside>
@@ -301,6 +302,25 @@
         <div id="teamCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
       </section>
 
+      <!-- EMPRESAS (solo admin) -->
+      <section id="view-companies" class="view space-y-4">
+        <h2 class="font-semibold text-navy text-lg">Empresas</h2>
+
+        <div class="bg-white rounded-xl shadow-sm p-4 space-y-3">
+          <h3 class="text-sm font-semibold text-navy">Nueva empresa</h3>
+          <form id="newCompanyForm" class="flex flex-wrap gap-3 items-end">
+            <div>
+              <label class="text-xs text-gray-500">Nombre de la empresa</label>
+              <input id="newCompanyName" required class="block border rounded-md px-2 py-1.5 text-sm w-64">
+            </div>
+            <button type="submit" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">Crear empresa</button>
+          </form>
+          <p id="newCompanyMsg" class="text-xs hidden"></p>
+        </div>
+
+        <div id="companiesList" class="space-y-3"></div>
+      </section>
+
     </main>
   </div>
 </div>
@@ -350,6 +370,17 @@ function showApp() {
   const badge = document.getElementById('userBadge');
   const companyLabel = auth.user.role === 'admin' ? 'Admin CDI' : (auth.user.company_name || 'Cliente');
   badge.textContent = `${auth.user.name || auth.user.email} · ${companyLabel}`;
+  const isAdmin = auth.user.role === 'admin';
+  document.getElementById('navCompanies').classList.toggle('hidden', !isAdmin);
+  document.getElementById('navCompanies').classList.toggle('flex', isAdmin);
+}
+
+async function loadCompanies() {
+  const res = await fetch(API_BASE + '/companies', { headers: authHeaders() });
+  if (!res.ok) throw new Error('No se pudo cargar la lista de empresas');
+  const list = await res.json();
+  companies = list.data || [];
+  renderCompanySelector();
 }
 
 async function doLogin(email, password) {
@@ -364,8 +395,7 @@ async function doLogin(email, password) {
   saveAuth();
 
   if (auth.user.role === 'admin') {
-    const list = await fetch(API_BASE + '/companies', { headers: authHeaders() }).then((r) => r.json());
-    companies = list.data || [];
+    await loadCompanies();
     selectedCompanyId = companies[0]?.id || null;
     renderCompanySelector();
   } else {
@@ -970,6 +1000,7 @@ function switchView(view) {
   document.querySelectorAll('.sidebar-link').forEach(l => l.classList.toggle('active', l.dataset.view === view));
   if (view === 'dashboard') renderDashboard();
   if (view === 'kpis') renderKpis();
+  if (view === 'companies') renderCompaniesAdmin();
 }
 document.querySelectorAll('.sidebar-link').forEach(link => {
   link.addEventListener('click', () => switchView(link.dataset.view));
@@ -1033,16 +1064,96 @@ document.getElementById('companySelector').addEventListener('change', async (e) 
   render();
 });
 
+/* ---------------- Empresas (solo admin) ---------------- */
+function renderCompaniesAdmin() {
+  const list = document.getElementById('companiesList');
+  list.innerHTML = companies.map((c) => `
+    <div class="bg-white rounded-xl shadow-sm p-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="font-semibold text-navy text-sm">${c.name}</p>
+          <p class="text-[11px] text-gray-400">slug: ${c.slug}</p>
+        </div>
+      </div>
+      <form data-new-user-for="${c.id}" class="flex flex-wrap gap-2 items-end border-t pt-3">
+        <div>
+          <label class="text-[11px] text-gray-500">Nombre contacto</label>
+          <input class="cu-name block border rounded-md px-2 py-1 text-xs w-40">
+        </div>
+        <div>
+          <label class="text-[11px] text-gray-500">Email</label>
+          <input type="email" required class="cu-email block border rounded-md px-2 py-1 text-xs w-48">
+        </div>
+        <div>
+          <label class="text-[11px] text-gray-500">Contraseña</label>
+          <input type="text" required minlength="8" class="cu-password block border rounded-md px-2 py-1 text-xs w-36">
+        </div>
+        <button type="submit" class="text-xs bg-brandgreen text-white px-3 py-1.5 rounded-md hover:bg-green-700">+ Usuario cliente</button>
+        <span class="cu-msg text-[11px]"></span>
+      </form>
+    </div>
+  `).join('') || `<p class="text-gray-400 text-sm">Todavía no hay empresas creadas.</p>`;
+}
+
+document.getElementById('newCompanyForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nameInput = document.getElementById('newCompanyName');
+  const msg = document.getElementById('newCompanyMsg');
+  msg.classList.remove('hidden', 'text-red-600', 'text-green-600');
+  try {
+    const res = await fetch(API_BASE + '/companies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ name: nameInput.value.trim() })
+    });
+    const body = await res.json();
+    if (!res.ok || !body.success) throw new Error(body.error || 'Error al crear la empresa');
+    nameInput.value = '';
+    msg.textContent = `Empresa "${body.data.name}" creada.`;
+    msg.classList.add('text-green-600');
+    await loadCompanies();
+    renderCompaniesAdmin();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add('text-red-600');
+  }
+});
+
+document.getElementById('companiesList').addEventListener('submit', async (e) => {
+  const form = e.target.closest('[data-new-user-for]');
+  if (!form) return;
+  e.preventDefault();
+  const companyId = form.dataset.newUserFor;
+  const msg = form.querySelector('.cu-msg');
+  msg.className = 'cu-msg text-[11px]';
+  try {
+    const res = await fetch(`${API_BASE}/companies/${companyId}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({
+        name: form.querySelector('.cu-name').value.trim(),
+        email: form.querySelector('.cu-email').value.trim(),
+        password: form.querySelector('.cu-password').value
+      })
+    });
+    const body = await res.json();
+    if (!res.ok || !body.success) throw new Error(body.error || 'Error al crear el usuario');
+    msg.textContent = `Usuario ${body.data.email} creado.`;
+    msg.classList.add('text-green-600');
+    form.reset();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add('text-red-600');
+  }
+});
+
 /* ---------------- Init ---------------- */
 async function init() {
   if (!auth || !auth.token) { showLogin(); return; }
 
   try {
     if (auth.user.role === 'admin') {
-      const res = await fetch(API_BASE + '/companies', { headers: authHeaders() });
-      if (!res.ok) throw new Error('401');
-      const list = await res.json();
-      companies = list.data || [];
+      await loadCompanies();
       selectedCompanyId = companies[0]?.id || null;
       renderCompanySelector();
     } else {
