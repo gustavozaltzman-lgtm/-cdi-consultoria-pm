@@ -1,10 +1,15 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { pool } = require('./db');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+// Vercel enruta todas las requests (incluida "/") a esta función, así que
+// el propio Express sirve el frontend estático en vez de depender del
+// enrutamiento automático de archivos de Vercel.
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const ok = (data) => ({ success: true, data });
 const fail = (message) => ({ success: false, error: message });
