@@ -841,7 +841,12 @@ function nextTempId(table) {
 }
 
 /* ---------------- Utilidades ---------------- */
-function fmtDate(d) { return d ? d : '-'; }
+// El backend devuelve columnas DATE como timestamp ISO completo
+// (ej. "2026-08-01T00:00:00.000Z") al pasar por JSON — un <input type="date">
+// exige exactamente YYYY-MM-DD o lo renderiza vacío, así que todo lo que
+// muestra o edita una fecha pasa por acá primero.
+function toDateOnly(v) { return v ? String(v).slice(0, 10) : ''; }
+function fmtDate(d) { return d ? toDateOnly(d) : '-'; }
 function statusColor(status) {
   return {
     'No iniciado': 'bg-gray-100 text-gray-700', 'No iniciada': 'bg-gray-100 text-gray-700',
@@ -901,7 +906,7 @@ function editableCell(value, field, table, id, extraClass = '') {
 // Fecha en un <input type="date"> real (siempre guarda/expone YYYY-MM-DD sin
 // ambigüedad de formato), en vez de texto libre en una celda contenteditable.
 function editableDateCell(value, field, table, id) {
-  return `<td class="px-3 py-2"><input type="date" value="${value || ''}" data-edit-date data-table="${table}" data-id="${id}" data-field="${field}" class="text-xs border rounded px-1 py-0.5 w-full"></td>`;
+  return `<td class="px-3 py-2"><input type="date" value="${toDateOnly(value)}" data-edit-date data-table="${table}" data-id="${id}" data-field="${field}" class="text-xs border rounded px-1 py-0.5 w-full"></td>`;
 }
 function progressBar(value) {
   const v = Number(value) || 0;
