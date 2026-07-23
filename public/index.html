@@ -160,6 +160,7 @@
               <tr>
                 <th class="px-3 py-2 text-left">Etapa</th>
                 <th class="px-3 py-2 text-left">Actividad</th>
+                <th class="px-3 py-2 text-left">Hito del Plan</th>
                 <th class="px-3 py-2 text-left">Responsable</th>
                 <th class="px-3 py-2 text-left">Prioridad</th>
                 <th class="px-3 py-2 text-left">Inicio</th>
@@ -551,10 +552,10 @@ const TABLE_ENDPOINT = {
 const DEMO_DATA = {
   config: { project_name: 'Optimización de Almacenes e Inventarios — Planta Norte', client_name: 'Distribuidora Andina S.A.', start_date: '2026-02-02', end_date: '2026-07-10', status: 'En proceso' },
   tasks: [
-    { id: 1, stage: 'Diagnóstico', activity: 'Kickoff y relevamiento inicial', responsible: 'Gustavo Zaltzman', priority: 'Alta', start_date: '2026-02-02', end_date: '2026-02-04', status: 'Finalizado', progress: 100 },
-    { id: 2, stage: 'Diagnóstico', activity: 'Relevamiento de layout de almacén', responsible: 'Equipo CDI', priority: 'Media', start_date: '2026-02-05', end_date: '2026-02-10', status: 'Finalizado', progress: 100 },
-    { id: 3, stage: 'Diagnóstico', activity: 'Análisis de flujo de picking', responsible: 'Equipo CDI', priority: 'Alta', start_date: '2026-02-10', end_date: '2026-02-17', status: 'Finalizado', progress: 100 },
-    { id: 4, stage: 'Diseño', activity: 'Rediseño de layout de almacén', responsible: 'Consultor Senior', priority: 'Crítica', start_date: '2026-02-25', end_date: '2026-03-10', status: 'Finalizado', progress: 100 },
+    { id: 1, stage: 'Diagnóstico', activity: 'Kickoff y relevamiento inicial', responsible: 'Gustavo Zaltzman', priority: 'Alta', start_date: '2026-02-02', end_date: '2026-02-04', status: 'Finalizado', progress: 100, stage_activity_id: 'D-1' },
+    { id: 2, stage: 'Diagnóstico', activity: 'Relevamiento de layout de almacén', responsible: 'Equipo CDI', priority: 'Media', start_date: '2026-02-05', end_date: '2026-02-10', status: 'Finalizado', progress: 100, stage_activity_id: 'D-2' },
+    { id: 3, stage: 'Diagnóstico', activity: 'Análisis de flujo de picking', responsible: 'Equipo CDI', priority: 'Alta', start_date: '2026-02-10', end_date: '2026-02-17', status: 'Finalizado', progress: 100, stage_activity_id: 'D-2' },
+    { id: 4, stage: 'Diseño', activity: 'Rediseño de layout de almacén', responsible: 'Consultor Senior', priority: 'Crítica', start_date: '2026-02-25', end_date: '2026-03-10', status: 'Finalizado', progress: 100, stage_activity_id: 'E-1' },
     { id: 5, stage: 'Diseño', activity: 'Diseño de proceso de picking', responsible: 'Equipo CDI', priority: 'Alta', start_date: '2026-03-10', end_date: '2026-03-18', status: 'En proceso', progress: 80 },
     { id: 6, stage: 'Diseño', activity: 'Especificación funcional de WMS', responsible: 'Analista TI', priority: 'Alta', start_date: '2026-03-15', end_date: '2026-03-25', status: 'En proceso', progress: 60 },
     { id: 7, stage: 'Implementación', activity: 'Selección de proveedor de WMS', responsible: 'Analista TI', priority: 'Alta', start_date: '2026-03-28', end_date: '2026-04-10', status: 'No iniciado', progress: 0 },
@@ -761,6 +762,15 @@ function planStageSelectHTML(current, id) {
     <option value="__new__">+ Nuevo segmento…</option>
   </select>`;
 }
+// Vincula una tarea del Gantt a un hito del Plan CDI (relación muchas
+// tareas -> un hito, no 1:1). Reusa el mecanismo genérico data-edit-select.
+function planStageLinkSelectHTML(current, taskId) {
+  const opts = state.plan_stages.map((p) => `<option value="${p.activity_id}" ${p.activity_id === current ? 'selected' : ''}>${p.activity_id} — ${p.activity}</option>`).join('');
+  return `<select data-edit-select data-table="tasks" data-id="${taskId}" data-field="stage_activity_id" class="text-xs border rounded px-1 py-0.5 bg-white max-w-[180px]">
+    <option value="" ${!current ? 'selected' : ''}>— sin vincular —</option>
+    ${opts}
+  </select>`;
+}
 
 function selectHTML(options, current, field, table, id) {
   return `<select data-edit-select data-table="${table}" data-id="${id}" data-field="${field}" class="text-xs border rounded px-1 py-0.5 bg-white">
@@ -850,6 +860,7 @@ function renderTasks() {
     <tr class="border-b hover:bg-gray-50">
       ${editableCell(t.stage, 'stage', 'tasks', t.id)}
       ${editableCell(t.activity, 'activity', 'tasks', t.id, 'font-medium')}
+      <td class="px-3 py-2">${planStageLinkSelectHTML(t.stage_activity_id, t.id)}</td>
       ${editableCell(t.responsible, 'responsible', 'tasks', t.id)}
       <td class="px-3 py-2 ${priorityColor(t.priority)} font-medium">${selectHTML(PRIORITY_OPTIONS, t.priority, 'priority', 'tasks', t.id)}</td>
       ${editableDateCell(t.start_date, 'start_date', 'tasks', t.id)}
@@ -858,7 +869,7 @@ function renderTasks() {
       <td class="px-3 py-2">${progressBarFor(t)}</td>
       <td class="px-3 py-2"><button data-del="tasks" data-id="${t.id}" class="text-red-400 hover:text-red-600">✕</button></td>
     </tr>
-  `).join('') || emptyRow(9);
+  `).join('') || emptyRow(10);
 }
 function progressBarFor(t) {
   const v = Number(t.progress) || 0;
@@ -869,6 +880,21 @@ function progressBarFor(t) {
   </div>`;
 }
 function emptyRow(cols) { return `<tr><td colspan="${cols}" class="px-3 py-6 text-center text-gray-400">Sin registros. Usá "+ Nuevo" para agregar.</td></tr>`; }
+
+// Avance agregado de las tareas del Gantt vinculadas a este hito del plan —
+// así un cambio de estado/progreso en el Gantt se ve reflejado en Plan CDI
+// sin duplicar la edición campo a campo (la relación es muchas tareas a un
+// hito, no 1:1).
+function planStageTaskRollupHTML(activityId) {
+  const linked = state.tasks.filter((t) => t.stage_activity_id === activityId);
+  if (!linked.length) return `<p class="text-[11px] text-gray-400 mt-1">Sin tareas del Gantt vinculadas.</p>`;
+  const done = linked.filter((t) => t.status === 'Finalizado').length;
+  const avgProgress = (linked.reduce((s, t) => s + (Number(t.progress) || 0), 0) / linked.length).toFixed(0);
+  return `<div class="mt-1.5 flex items-center gap-2">
+    <div class="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden max-w-[140px]"><div class="h-full bg-brandgreen" style="width:${avgProgress}%"></div></div>
+    <span class="text-[11px] text-gray-500">${linked.length} tarea${linked.length === 1 ? '' : 's'} del Gantt · ${done}/${linked.length} finalizadas · ${avgProgress}% avance</span>
+  </div>`;
+}
 
 /* ---------------- Render: Plan CDI ---------------- */
 function renderPlan() {
@@ -896,6 +922,7 @@ function renderPlan() {
               </div>
               <p class="text-xs text-gray-500 mt-0.5 cell-editable" contenteditable="true" data-table="plan_stages" data-id="${i.id}" data-field="description">${i.description || ''}</p>
               <p class="text-[11px] text-gray-400 mt-0.5">Entregable: ${i.deliverable || '-'} · Duración: ${i.estimated_duration || '-'} ${i.dependencies ? '· Depende de: ' + i.dependencies : ''}</p>
+              ${planStageTaskRollupHTML(i.activity_id)}
             </div>
             <button data-del="plan_stages" data-id="${i.id}" class="text-red-400 hover:text-red-600">✕</button>
           </div>`).join('')}
@@ -1246,6 +1273,7 @@ function applyEdit(table, id, field, value) {
   let v = value;
   if (field === 'progress' && v !== '') v = Math.max(0, Math.min(100, Number(v) || 0));
   if (field === 'linked_audit_kpi_name' && v === '') v = null;
+  if (field === 'stage_activity_id' && v === '') v = null;
   record[field] = v;
   persist(table, record.id, { [field]: v }, false, state[table], record);
   render();
@@ -1253,7 +1281,7 @@ function applyEdit(table, id, field, value) {
 
 /* ---------------- Alta / Baja de registros ---------------- */
 const NEW_RECORD_DEFAULTS = {
-  tasks: () => ({ stage: 'Diagnóstico', activity: 'Nueva tarea', responsible: '', priority: 'Media', start_date: new Date().toISOString().slice(0, 10), end_date: new Date().toISOString().slice(0, 10), status: 'No iniciado', progress: 0 }),
+  tasks: () => ({ stage: 'Diagnóstico', activity: 'Nueva tarea', responsible: '', priority: 'Media', start_date: new Date().toISOString().slice(0, 10), end_date: new Date().toISOString().slice(0, 10), status: 'No iniciado', progress: 0, stage_activity_id: null }),
   // plan_stages no usa este flujo genérico: se crea con el formulario dedicado
   // de "+ Nueva Actividad" (elige segmento existente o uno nuevo), ver más abajo.
   risks: () => ({ risk: 'Nuevo riesgo', category: '', probability: 'Media', impact: 'Medio', level: 'MEDIO', responsible: '', mitigation: '', status: 'Activo' }),

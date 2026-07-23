@@ -89,7 +89,7 @@ app.use('/api', requireAuth, resolveCompany);
 // Whitelisted, editable columns per table — prevents arbitrary column injection from req.body.
 const TABLES = {
   tasks: {
-    columns: ['stage', 'activity', 'description', 'responsible', 'priority', 'start_date', 'end_date', 'dependency', 'status', 'progress', 'observations'],
+    columns: ['stage', 'activity', 'description', 'responsible', 'priority', 'start_date', 'end_date', 'dependency', 'status', 'progress', 'observations', 'stage_activity_id'],
     order: 'start_date ASC, id ASC'
   },
   plan_stages: {
