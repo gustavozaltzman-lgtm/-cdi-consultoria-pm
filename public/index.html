@@ -196,6 +196,18 @@
               <label class="text-xs text-gray-500">Actividad</label>
               <input id="planNewActivityName" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full" placeholder="Nombre de la actividad">
             </div>
+            <div>
+              <label class="text-xs text-gray-500">Entregable</label>
+              <input id="planNewDeliverable" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full" placeholder="Ej: Informe de diagnóstico">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Duración</label>
+              <input id="planNewDuration" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full" placeholder="Ej: 3 días">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Depende de</label>
+              <input id="planNewDependencies" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full" placeholder="Ej: D-1">
+            </div>
           </div>
           <div class="flex items-center gap-3">
             <button id="btnCreatePlanActivity" class="text-xs bg-navy text-white px-4 py-2 rounded-md hover:bg-navy-light">Crear actividad</button>
@@ -1351,6 +1363,9 @@ document.getElementById('btnCreatePlanActivity').addEventListener('click', async
   const select = document.getElementById('planNewStageSelect');
   const stageNameInput = document.getElementById('planNewStageName');
   const activityInput = document.getElementById('planNewActivityName');
+  const deliverableInput = document.getElementById('planNewDeliverable');
+  const durationInput = document.getElementById('planNewDuration');
+  const dependenciesInput = document.getElementById('planNewDependencies');
   const stage = (select.value === '__new__' ? stageNameInput.value : select.value).trim();
   const activity = activityInput.value.trim() || 'Nueva actividad';
   if (!stage) { alert('Ingresá o elegí el segmento de la actividad.'); return; }
@@ -1360,13 +1375,20 @@ document.getElementById('btnCreatePlanActivity').addEventListener('click', async
     stage,
     activity_id: 'X-' + Date.now().toString().slice(-4),
     activity,
-    description: '', deliverable: '', estimated_duration: '', dependencies: '', completed: false
+    description: '',
+    deliverable: deliverableInput.value.trim(),
+    estimated_duration: durationInput.value.trim(),
+    dependencies: dependenciesInput.value.trim(),
+    completed: false
   };
   state.plan_stages.push(record);
   render();
   document.getElementById('planNewForm').classList.add('hidden');
   activityInput.value = '';
   stageNameInput.value = '';
+  deliverableInput.value = '';
+  durationInput.value = '';
+  dependenciesInput.value = '';
   await persist('plan_stages', record.id, record, true, state.plan_stages, record);
   render();
 });
