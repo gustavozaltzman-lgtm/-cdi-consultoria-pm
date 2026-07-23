@@ -178,8 +178,31 @@
       <section id="view-plan" class="view space-y-4">
         <div class="flex items-center justify-between">
           <h2 class="font-semibold text-navy text-lg">Plan Metodológico CDI</h2>
-          <button data-add="plan_stages" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">+ Nueva Actividad</button>
+          <button id="btnNewPlanActivity" class="text-xs bg-navy text-white px-3 py-1.5 rounded-md hover:bg-navy-light">+ Nueva Actividad</button>
         </div>
+
+        <div id="planNewForm" class="hidden bg-white rounded-xl shadow-sm p-4 space-y-3">
+          <h3 class="text-sm font-semibold text-navy">Nueva actividad</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="text-xs text-gray-500">Segmento</label>
+              <select id="planNewStageSelect" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full"></select>
+            </div>
+            <div id="planNewStageNameWrap" class="hidden">
+              <label class="text-xs text-gray-500">Nombre del nuevo segmento</label>
+              <input id="planNewStageName" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full" placeholder="Ej: Diagnóstico Inicial y Matriz ABC">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Actividad</label>
+              <input id="planNewActivityName" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full" placeholder="Nombre de la actividad">
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <button id="btnCreatePlanActivity" class="text-xs bg-navy text-white px-4 py-2 rounded-md hover:bg-navy-light">Crear actividad</button>
+            <button id="btnCancelPlanActivity" type="button" class="text-xs text-gray-500 hover:text-gray-700">Cancelar</button>
+          </div>
+        </div>
+
         <div id="planTree" class="space-y-3"></div>
       </section>
 
@@ -707,7 +730,25 @@ function riskLevelColor(l) {
 const STATUS_OPTIONS_TASK = ['No iniciado', 'En proceso', 'Bloqueado', 'Finalizado'];
 const STATUS_OPTIONS_ACTION = ['No iniciada', 'En curso', 'Bloqueada', 'Cerrada'];
 const PRIORITY_OPTIONS = ['Baja', 'Media', 'Alta', 'Crítica'];
-const PLAN_STAGE_OPTIONS = ['Diagnóstico', 'Diseño', 'Implementación', 'Capacitación', 'Cierre'];
+
+// Los segmentos del Plan CDI son texto libre definido por cada proyecto (ej.
+// "Diagnóstico Inicial y Matriz ABC"), no una lista fija — se derivan de los
+// que ya existen en el plan actual, en orden de primera aparición.
+function planStageNames() {
+  const seen = [];
+  state.plan_stages.forEach((p) => { if (p.stage && !seen.includes(p.stage)) seen.push(p.stage); });
+  return seen;
+}
+// Select de segmento para una actividad existente: elegir "+ Nuevo segmento…"
+// pide el nombre y mueve la actividad ahí.
+function planStageSelectHTML(current, id) {
+  const names = planStageNames();
+  const opts = names.map((n) => `<option value="${n}" ${n === current ? 'selected' : ''}>${n}</option>`).join('');
+  return `<select data-plan-stage-select data-id="${id}" class="text-xs border rounded px-1 py-0.5 bg-white">
+    ${opts}
+    <option value="__new__">+ Nuevo segmento…</option>
+  </select>`;
+}
 
 function selectHTML(options, current, field, table, id) {
   return `<select data-edit-select data-table="${table}" data-id="${id}" data-field="${field}" class="text-xs border rounded px-1 py-0.5 bg-white">
@@ -821,11 +862,8 @@ function emptyRow(cols) { return `<tr><td colspan="${cols}" class="px-3 py-6 tex
 function renderPlan() {
   const groups = {};
   state.plan_stages.forEach(p => { groups[p.stage] = groups[p.stage] || []; groups[p.stage].push(p); });
-  // Orden fijo de la metodología (no el orden de inserción del objeto), y al
-  // final cualquier etapa "vieja" con nombre libre que no esté en la lista.
-  const stageNames = [...PLAN_STAGE_OPTIONS, ...Object.keys(groups).filter(s => !PLAN_STAGE_OPTIONS.includes(s))];
   const container = document.getElementById('planTree');
-  container.innerHTML = stageNames.filter(s => groups[s] && groups[s].length).map((stage) => {
+  container.innerHTML = planStageNames().map((stage) => {
     const items = groups[stage];
     const done = items.filter(i => i.completed).length;
     return `
@@ -842,7 +880,7 @@ function renderPlan() {
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="text-xs font-mono text-gray-400">${i.activity_id}</span>
                 <span class="cell-editable font-medium" contenteditable="true" data-table="plan_stages" data-id="${i.id}" data-field="activity">${i.activity}</span>
-                ${selectHTML(PLAN_STAGE_OPTIONS, i.stage, 'stage', 'plan_stages', i.id)}
+                ${planStageSelectHTML(i.stage, i.id)}
               </div>
               <p class="text-xs text-gray-500 mt-0.5 cell-editable" contenteditable="true" data-table="plan_stages" data-id="${i.id}" data-field="description">${i.description || ''}</p>
               <p class="text-[11px] text-gray-400 mt-0.5">Entregable: ${i.deliverable || '-'} · Duración: ${i.estimated_duration || '-'} ${i.dependencies ? '· Depende de: ' + i.dependencies : ''}</p>
@@ -1170,6 +1208,16 @@ document.addEventListener('change', (e) => {
   if (el.matches('[data-plan-toggle]')) {
     applyEdit('plan_stages', el.dataset.id, 'completed', el.checked);
   }
+  if (el.matches('[data-plan-stage-select]')) {
+    const id = el.dataset.id;
+    if (el.value === '__new__') {
+      const name = (prompt('Nombre del nuevo segmento:') || '').trim();
+      if (name) applyEdit('plan_stages', id, 'stage', name);
+      else renderPlan(); // el usuario canceló: vuelve a mostrar el segmento actual seleccionado
+    } else {
+      applyEdit('plan_stages', id, 'stage', el.value);
+    }
+  }
   if (el.matches('[data-edit-date]')) {
     const { table, id, field } = el.dataset;
     applyEdit(table, id, field, el.value);
@@ -1194,7 +1242,8 @@ function applyEdit(table, id, field, value) {
 /* ---------------- Alta / Baja de registros ---------------- */
 const NEW_RECORD_DEFAULTS = {
   tasks: () => ({ stage: 'Diagnóstico', activity: 'Nueva tarea', responsible: '', priority: 'Media', start_date: new Date().toISOString().slice(0, 10), end_date: new Date().toISOString().slice(0, 10), status: 'No iniciado', progress: 0 }),
-  plan_stages: () => ({ stage: 'Diagnóstico', activity_id: 'X-' + Date.now().toString().slice(-4), activity: 'Nueva actividad', description: '', deliverable: '', estimated_duration: '', dependencies: '', completed: false }),
+  // plan_stages no usa este flujo genérico: se crea con el formulario dedicado
+  // de "+ Nueva Actividad" (elige segmento existente o uno nuevo), ver más abajo.
   risks: () => ({ risk: 'Nuevo riesgo', category: '', probability: 'Media', impact: 'Medio', level: 'MEDIO', responsible: '', mitigation: '', status: 'Activo' }),
   minutes: () => ({ meeting_date: new Date().toISOString().slice(0, 10), meeting_type: '', topic: 'Nueva minuta', decisions: '', actions: '', responsible: '', status: 'Pendiente' }),
   actions: () => ({ action_name: 'Nueva acción', stage: '', responsible: '', priority: 'Media', commitment_date: '', status: 'No iniciada', progress: 0, origin: 'Manual' }),
@@ -1273,6 +1322,52 @@ modeSelector.addEventListener('change', async () => {
   state.mode = modeSelector.value;
   localStorage.setItem(MODE_KEY, state.mode);
   await fetchAll();
+  render();
+});
+
+/* ---------------- Plan CDI: alta de actividad (segmento existente o nuevo) ---------------- */
+document.getElementById('btnNewPlanActivity').addEventListener('click', () => {
+  const form = document.getElementById('planNewForm');
+  const select = document.getElementById('planNewStageSelect');
+  const names = planStageNames();
+  select.innerHTML = names.map((n) => `<option value="${n}">${n}</option>`).join('') + `<option value="__new__">+ Nuevo segmento…</option>`;
+  const nameWrap = document.getElementById('planNewStageNameWrap');
+  if (!names.length) {
+    // Todavía no hay ningún segmento cargado: pedir directamente el nombre.
+    select.value = '__new__';
+    nameWrap.classList.remove('hidden');
+  } else {
+    nameWrap.classList.add('hidden');
+  }
+  form.classList.toggle('hidden');
+});
+document.getElementById('planNewStageSelect').addEventListener('change', (e) => {
+  document.getElementById('planNewStageNameWrap').classList.toggle('hidden', e.target.value !== '__new__');
+});
+document.getElementById('btnCancelPlanActivity').addEventListener('click', () => {
+  document.getElementById('planNewForm').classList.add('hidden');
+});
+document.getElementById('btnCreatePlanActivity').addEventListener('click', async () => {
+  const select = document.getElementById('planNewStageSelect');
+  const stageNameInput = document.getElementById('planNewStageName');
+  const activityInput = document.getElementById('planNewActivityName');
+  const stage = (select.value === '__new__' ? stageNameInput.value : select.value).trim();
+  const activity = activityInput.value.trim() || 'Nueva actividad';
+  if (!stage) { alert('Ingresá o elegí el segmento de la actividad.'); return; }
+
+  const record = {
+    id: nextTempId('plan_stages'),
+    stage,
+    activity_id: 'X-' + Date.now().toString().slice(-4),
+    activity,
+    description: '', deliverable: '', estimated_duration: '', dependencies: '', completed: false
+  };
+  state.plan_stages.push(record);
+  render();
+  document.getElementById('planNewForm').classList.add('hidden');
+  activityInput.value = '';
+  stageNameInput.value = '';
+  await persist('plan_stages', record.id, record, true, state.plan_stages, record);
   render();
 });
 
