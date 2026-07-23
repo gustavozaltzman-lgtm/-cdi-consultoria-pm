@@ -707,6 +707,7 @@ function riskLevelColor(l) {
 const STATUS_OPTIONS_TASK = ['No iniciado', 'En proceso', 'Bloqueado', 'Finalizado'];
 const STATUS_OPTIONS_ACTION = ['No iniciada', 'En curso', 'Bloqueada', 'Cerrada'];
 const PRIORITY_OPTIONS = ['Baja', 'Media', 'Alta', 'Crítica'];
+const PLAN_STAGE_OPTIONS = ['Diagnóstico', 'Diseño', 'Implementación', 'Capacitación', 'Cierre'];
 
 function selectHTML(options, current, field, table, id) {
   return `<select data-edit-select data-table="${table}" data-id="${id}" data-field="${field}" class="text-xs border rounded px-1 py-0.5 bg-white">
@@ -715,6 +716,11 @@ function selectHTML(options, current, field, table, id) {
 }
 function editableCell(value, field, table, id, extraClass = '') {
   return `<td class="px-3 py-2 cell-editable ${extraClass}" contenteditable="true" data-table="${table}" data-id="${id}" data-field="${field}">${value ?? ''}</td>`;
+}
+// Fecha en un <input type="date"> real (siempre guarda/expone YYYY-MM-DD sin
+// ambigüedad de formato), en vez de texto libre en una celda contenteditable.
+function editableDateCell(value, field, table, id) {
+  return `<td class="px-3 py-2"><input type="date" value="${value || ''}" data-edit-date data-table="${table}" data-id="${id}" data-field="${field}" class="text-xs border rounded px-1 py-0.5 w-full"></td>`;
 }
 function progressBar(value) {
   const v = Number(value) || 0;
@@ -781,14 +787,20 @@ function renderDashboard() {
 /* ---------------- Render: Gantt (tasks) ---------------- */
 function renderTasks() {
   const tbody = document.querySelector('#tableTasks tbody');
-  tbody.innerHTML = state.tasks.map(t => `
+  // Ordenado por fecha de inicio (como el Gantt lo pide), no por orden de
+  // alta — así una tarea nueva aparece en su lugar cronológico, no al final.
+  const sorted = [...state.tasks].sort((a, b) => {
+    const byDate = new Date(a.start_date || 0) - new Date(b.start_date || 0);
+    return byDate !== 0 ? byDate : a.id - b.id;
+  });
+  tbody.innerHTML = sorted.map(t => `
     <tr class="border-b hover:bg-gray-50">
       ${editableCell(t.stage, 'stage', 'tasks', t.id)}
       ${editableCell(t.activity, 'activity', 'tasks', t.id, 'font-medium')}
       ${editableCell(t.responsible, 'responsible', 'tasks', t.id)}
       <td class="px-3 py-2 ${priorityColor(t.priority)} font-medium">${selectHTML(PRIORITY_OPTIONS, t.priority, 'priority', 'tasks', t.id)}</td>
-      ${editableCell(t.start_date, 'start_date', 'tasks', t.id)}
-      ${editableCell(t.end_date, 'end_date', 'tasks', t.id)}
+      ${editableDateCell(t.start_date, 'start_date', 'tasks', t.id)}
+      ${editableDateCell(t.end_date, 'end_date', 'tasks', t.id)}
       <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-[11px] ${statusColor(t.status)}">${selectHTML(STATUS_OPTIONS_TASK, t.status, 'status', 'tasks', t.id)}</span></td>
       <td class="px-3 py-2">${progressBarFor(t)}</td>
       <td class="px-3 py-2"><button data-del="tasks" data-id="${t.id}" class="text-red-400 hover:text-red-600">✕</button></td>
@@ -809,8 +821,12 @@ function emptyRow(cols) { return `<tr><td colspan="${cols}" class="px-3 py-6 tex
 function renderPlan() {
   const groups = {};
   state.plan_stages.forEach(p => { groups[p.stage] = groups[p.stage] || []; groups[p.stage].push(p); });
+  // Orden fijo de la metodología (no el orden de inserción del objeto), y al
+  // final cualquier etapa "vieja" con nombre libre que no esté en la lista.
+  const stageNames = [...PLAN_STAGE_OPTIONS, ...Object.keys(groups).filter(s => !PLAN_STAGE_OPTIONS.includes(s))];
   const container = document.getElementById('planTree');
-  container.innerHTML = Object.entries(groups).map(([stage, items]) => {
+  container.innerHTML = stageNames.filter(s => groups[s] && groups[s].length).map((stage) => {
+    const items = groups[stage];
     const done = items.filter(i => i.completed).length;
     return `
     <div class="bg-white rounded-xl shadow-sm">
@@ -823,9 +839,10 @@ function renderPlan() {
           <div class="px-4 py-2.5 flex items-start gap-3 text-sm">
             <input type="checkbox" data-plan-toggle data-id="${i.id}" ${i.completed ? 'checked' : ''} class="mt-1 accent-brandgreen">
             <div class="flex-1">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
                 <span class="text-xs font-mono text-gray-400">${i.activity_id}</span>
                 <span class="cell-editable font-medium" contenteditable="true" data-table="plan_stages" data-id="${i.id}" data-field="activity">${i.activity}</span>
+                ${selectHTML(PLAN_STAGE_OPTIONS, i.stage, 'stage', 'plan_stages', i.id)}
               </div>
               <p class="text-xs text-gray-500 mt-0.5 cell-editable" contenteditable="true" data-table="plan_stages" data-id="${i.id}" data-field="description">${i.description || ''}</p>
               <p class="text-[11px] text-gray-400 mt-0.5">Entregable: ${i.deliverable || '-'} · Duración: ${i.estimated_duration || '-'} ${i.dependencies ? '· Depende de: ' + i.dependencies : ''}</p>
@@ -860,7 +877,7 @@ function renderMinutes() {
   const tbody = document.querySelector('#tableMinutes tbody');
   tbody.innerHTML = state.minutes.map(m => `
     <tr class="border-b hover:bg-gray-50">
-      ${editableCell(m.meeting_date, 'meeting_date', 'minutes', m.id)}
+      ${editableDateCell(m.meeting_date, 'meeting_date', 'minutes', m.id)}
       ${editableCell(m.meeting_type, 'meeting_type', 'minutes', m.id)}
       ${editableCell(m.topic, 'topic', 'minutes', m.id, 'font-medium')}
       ${editableCell(m.decisions, 'decisions', 'minutes', m.id)}
@@ -882,7 +899,7 @@ function renderActions() {
       ${editableCell(a.stage, 'stage', 'actions', a.id)}
       ${editableCell(a.responsible, 'responsible', 'actions', a.id)}
       <td class="px-3 py-2 ${priorityColor(a.priority)} font-medium">${selectHTML(PRIORITY_OPTIONS, a.priority, 'priority', 'actions', a.id)}</td>
-      ${editableCell(a.commitment_date, 'commitment_date', 'actions', a.id)}
+      ${editableDateCell(a.commitment_date, 'commitment_date', 'actions', a.id)}
       <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full text-[11px] ${statusColor(a.status)}">${selectHTML(STATUS_OPTIONS_ACTION, a.status, 'status', 'actions', a.id)}</span></td>
       <td class="px-3 py-2">${progressBarAction(a)}</td>
       ${editableCell(a.origin, 'origin', 'actions', a.id)}
@@ -1152,6 +1169,10 @@ document.addEventListener('change', (e) => {
   }
   if (el.matches('[data-plan-toggle]')) {
     applyEdit('plan_stages', el.dataset.id, 'completed', el.checked);
+  }
+  if (el.matches('[data-edit-date]')) {
+    const { table, id, field } = el.dataset;
+    applyEdit(table, id, field, el.value);
   }
   if (el.id === 'auditSelector') {
     selectedAuditId = isNaN(el.value) ? el.value : Number(el.value);
