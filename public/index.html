@@ -268,6 +268,12 @@
           <h3 class="font-semibold text-navy mb-2 text-sm">Inicial vs Actual vs Objetivo</h3>
           <canvas id="chartKpis" height="240"></canvas>
         </div>
+
+        <!-- Histórico de KPIs de TODAS las Auditorías Cíclicas -->
+        <div class="bg-white rounded-xl shadow-sm p-4">
+          <h3 class="font-semibold text-navy mb-2 text-sm">Evolución de KPIs — Auditorías Cíclicas (histórico completo)</h3>
+          <canvas id="chartAuditKpis" height="240"></canvas>
+        </div>
       </section>
 
       <!-- AUDITORÍAS CÍCLICAS -->
@@ -327,30 +333,12 @@
           </form>
         </div>
 
-        <div id="auditKpiCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
-
-        <div class="bg-white rounded-xl shadow-sm p-4">
-          <h3 class="font-semibold text-navy mb-2 text-sm">Evolución de KPIs por auditoría</h3>
-          <canvas id="chartAuditKpis" height="240"></canvas>
-        </div>
-
-        <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
-          <table class="min-w-full text-xs" id="tableAudits">
-            <thead class="bg-navy text-white">
-              <tr>
-                <th class="px-3 py-2 text-left">Fecha</th>
-                <th class="px-3 py-2 text-left">Sucursal</th>
-                <th class="px-3 py-2 text-left">Auditor</th>
-                <th class="px-3 py-2 text-left">SKUs (exactos/contados)</th>
-                <th class="px-3 py-2 text-left">IRA %</th>
-                <th class="px-3 py-2 text-left">Descalce %</th>
-                <th class="px-3 py-2 text-left">Fantasmas %</th>
-                <th class="px-3 py-2 text-left">Cruce POS %</th>
-                <th class="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+        <div class="bg-white rounded-xl shadow-sm p-4 space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <h3 class="text-sm font-semibold text-navy">Ver auditoría</h3>
+            <select id="auditSelector" class="text-xs border rounded-md px-2 py-1.5 bg-gray-50 min-w-[240px]"></select>
+          </div>
+          <div id="auditDetail"></div>
         </div>
       </section>
 
@@ -955,9 +943,14 @@ function renderKpis() {
     },
     options: { scales: { x: { ticks: { font: { size: 10 } } } }, plugins: { legend: { position: 'bottom' } } }
   });
+
+  renderAuditTrendChart();
 }
 
 /* ---------------- Render: Auditorías Cíclicas ---------------- */
+// El panel de KPIs Logísticos muestra el histórico agregado de TODAS las
+// auditorías (chartAuditTrend); este panel es solo captura + detalle de UNA
+// auditoría a la vez, elegida con el <select> auditSelector.
 const AUDIT_KPI_DEFS = [
   { name: 'IRA % (Exactitud de Inventario)', label: 'IRA — Exactitud de Inventario', good: 'high' },
   { name: 'Descalce Monetario %', label: 'Descalce Monetario', good: 'low' },
@@ -970,51 +963,24 @@ function kpisForAudit(auditId) {
   return map;
 }
 function fmtKpi(v) { return v === undefined || v === null ? '-' : v + '%'; }
+function fmtMoney(v) { return v === null || v === undefined ? '-' : '$' + Number(v).toLocaleString('es-AR'); }
 function kpiColor(def, value) {
   if (value === undefined) return 'text-gray-400';
   if (def.good === 'high') return value >= 95 ? 'text-green-600' : value >= 85 ? 'text-amber-600' : 'text-red-600';
   return value <= 2 ? 'text-green-600' : value <= 5 ? 'text-amber-600' : 'text-red-600';
 }
+function auditLabel(a) {
+  return `${fmtDate(a.audit_date)} · ${a.branch_name}${a.auditor_name ? ' · ' + a.auditor_name : ''}`;
+}
 
 let chartAuditKpis;
-function renderAudits() {
-  const sorted = [...state.audit_logs].sort((a, b) => new Date(b.audit_date) - new Date(a.audit_date) || b.id - a.id);
-  const latest = sorted[0];
-  const latestKpis = latest ? kpisForAudit(latest.id) : {};
-
-  const cardsContainer = document.getElementById('auditKpiCards');
-  cardsContainer.innerHTML = latest ? AUDIT_KPI_DEFS.map((d) => {
-    const v = latestKpis[d.name];
-    return `
-    <div class="bg-white rounded-xl shadow-sm p-4 space-y-1">
-      <p class="text-[11px] text-gray-400">${d.label}</p>
-      <p class="text-2xl font-bold ${kpiColor(d, v)}">${fmtKpi(v)}</p>
-      <p class="text-[11px] text-gray-400">Último conteo: ${latest.branch_name} · ${fmtDate(latest.audit_date)}</p>
-    </div>`;
-  }).join('') : `<p class="text-gray-400 text-sm col-span-full">Sin auditorías registradas todavía.</p>`;
-
-  const tbody = document.querySelector('#tableAudits tbody');
-  tbody.innerHTML = sorted.map((a) => {
-    const k = kpisForAudit(a.id);
-    return `
-    <tr class="border-b hover:bg-gray-50">
-      <td class="px-3 py-2">${fmtDate(a.audit_date)}</td>
-      <td class="px-3 py-2 font-medium">${a.branch_name}</td>
-      <td class="px-3 py-2">${a.auditor_name || '-'}</td>
-      <td class="px-3 py-2">${a.exact_skus}/${a.total_skus_counted}</td>
-      <td class="px-3 py-2">${fmtKpi(k['IRA % (Exactitud de Inventario)'])}</td>
-      <td class="px-3 py-2">${fmtKpi(k['Descalce Monetario %'])}</td>
-      <td class="px-3 py-2">${fmtKpi(k['Ubicaciones Fantasma %'])}</td>
-      <td class="px-3 py-2">${fmtKpi(k['Errores de Cruce POS %'])}</td>
-      <td class="px-3 py-2"><button data-del="audit_logs" data-id="${a.id}" class="text-red-400 hover:text-red-600">✕</button></td>
-    </tr>`;
-  }).join('') || emptyRow(9);
-
+function renderAuditTrendChart() {
+  const ctx = document.getElementById('chartAuditKpis');
+  if (!ctx) return;
   const chronological = [...state.audit_logs].sort((a, b) => new Date(a.audit_date) - new Date(b.audit_date) || a.id - b.id);
   const labels = chronological.map((a) => `${fmtDate(a.audit_date)} · ${a.branch_name}`);
   const colors = ['#1e3a5f', '#e53e3e', '#d69e2e', '#38a169'];
 
-  const ctx = document.getElementById('chartAuditKpis');
   if (chartAuditKpis) chartAuditKpis.destroy();
   chartAuditKpis = new Chart(ctx, {
     type: 'line',
@@ -1030,6 +996,71 @@ function renderAudits() {
     },
     options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } } }
   });
+}
+
+// id de la auditoría elegida en el selector — persiste entre renders para no
+// perder la selección del usuario cada vez que se refresca el estado.
+let selectedAuditId = null;
+
+function renderAudits() {
+  const sorted = [...state.audit_logs].sort((a, b) => new Date(b.audit_date) - new Date(a.audit_date) || b.id - a.id);
+  const selector = document.getElementById('auditSelector');
+
+  if (!sorted.length) {
+    selector.innerHTML = '';
+    selectedAuditId = null;
+    document.getElementById('auditDetail').innerHTML = `<p class="text-gray-400 text-sm">Sin auditorías registradas todavía. Cargá un conteo arriba para ver el detalle acá.</p>`;
+    return;
+  }
+
+  // Si la selección actual ya no existe (se borró, o se acaba de reconciliar
+  // un id temporal con el real del servidor), se cae a la más reciente.
+  if (selectedAuditId === null || !sorted.some((a) => a.id === selectedAuditId)) {
+    selectedAuditId = sorted[0].id;
+  }
+
+  selector.innerHTML = sorted.map((a) => `<option value="${a.id}" ${a.id === selectedAuditId ? 'selected' : ''}>${auditLabel(a)}</option>`).join('');
+  renderAuditDetail(selectedAuditId);
+}
+
+function renderAuditDetail(auditId) {
+  const a = state.audit_logs.find((x) => x.id === auditId);
+  const container = document.getElementById('auditDetail');
+  if (!a) { container.innerHTML = ''; return; }
+  const k = kpisForAudit(a.id);
+
+  container.innerHTML = `
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="space-y-1">
+        <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Datos relevados</h4>
+        <dl class="text-sm divide-y">
+          <div class="flex justify-between py-1.5"><dt class="text-gray-500">Sucursal / Depósito</dt><dd class="font-medium">${a.branch_name}</dd></div>
+          <div class="flex justify-between py-1.5"><dt class="text-gray-500">Fecha</dt><dd class="font-medium">${fmtDate(a.audit_date)}</dd></div>
+          <div class="flex justify-between py-1.5"><dt class="text-gray-500">Duración</dt><dd class="font-medium">${a.duration_minutes ?? '-'} min</dd></div>
+          <div class="flex justify-between py-1.5"><dt class="text-gray-500">Auditor</dt><dd class="font-medium">${a.auditor_name || '-'}</dd></div>
+          <div class="flex justify-between py-1.5"><dt class="text-gray-500">SKUs contados</dt><dd class="font-medium">${a.total_skus_counted}</dd></div>
+          <div class="flex justify-between py-1.5"><dt class="text-gray-500">SKUs exactos</dt><dd class="font-medium">${a.exact_skus}</dd></div>
+          <div class="flex justify-between py-1.5"><dt class="text-gray-500">Valor teórico</dt><dd class="font-medium">${fmtMoney(a.total_theoretical_val)}</dd></div>
+          <div class="flex justify-between py-1.5"><dt class="text-gray-500">Valor físico</dt><dd class="font-medium">${fmtMoney(a.total_physical_val)}</dd></div>
+          <div class="flex justify-between py-1.5"><dt class="text-gray-500">Ubicaciones fantasma</dt><dd class="font-medium">${a.ghost_locations_count}</dd></div>
+          <div class="flex justify-between py-1.5"><dt class="text-gray-500">Errores de cruce POS</dt><dd class="font-medium">${a.pos_cross_errors_count}</dd></div>
+        </dl>
+      </div>
+      <div class="space-y-1">
+        <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">KPIs de este ciclo</h4>
+        <div class="grid grid-cols-2 gap-3">
+          ${AUDIT_KPI_DEFS.map((d) => `
+            <div class="bg-panel rounded-lg p-3 space-y-1">
+              <p class="text-[11px] text-gray-400">${d.label}</p>
+              <p class="text-xl font-bold ${kpiColor(d, k[d.name])}">${fmtKpi(k[d.name])}</p>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="pt-3 mt-3 border-t flex justify-end">
+      <button data-del="audit_logs" data-id="${a.id}" class="text-xs text-red-500 hover:text-red-700">✕ Eliminar esta auditoría</button>
+    </div>
+  `;
 }
 
 /* ---------------- Render: Before/After ---------------- */
@@ -1101,6 +1132,10 @@ document.addEventListener('change', (e) => {
   }
   if (el.matches('[data-plan-toggle]')) {
     applyEdit('plan_stages', el.dataset.id, 'completed', el.checked);
+  }
+  if (el.id === 'auditSelector') {
+    selectedAuditId = isNaN(el.value) ? el.value : Number(el.value);
+    renderAuditDetail(selectedAuditId);
   }
 });
 
