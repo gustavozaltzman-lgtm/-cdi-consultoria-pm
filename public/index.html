@@ -264,6 +264,37 @@
               <input id="planNewDependencies" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full" placeholder="Ej: D-1">
             </div>
           </div>
+
+          <div class="border-t pt-3">
+            <label class="flex items-center gap-2 text-sm font-medium text-navy">
+              <input type="checkbox" id="planNewGoesToGantt" checked class="accent-navy w-4 h-4">
+              Esta actividad va al Gantt (se crea una tarea vinculada)
+            </label>
+            <div id="planNewGanttFields" class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-2">
+              <div>
+                <label class="text-xs text-gray-500">Responsable</label>
+                <input id="planNewGanttResponsible" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+              </div>
+              <div>
+                <label class="text-xs text-gray-500">Prioridad</label>
+                <select id="planNewGanttPriority" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+                  <option value="Baja">Baja</option>
+                  <option value="Media" selected>Media</option>
+                  <option value="Alta">Alta</option>
+                  <option value="Crítica">Crítica</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-gray-500">Fecha de inicio</label>
+                <input type="date" id="planNewGanttStart" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+              </div>
+              <div>
+                <label class="text-xs text-gray-500">Fecha de fin</label>
+                <input type="date" id="planNewGanttEnd" class="mt-1 block border rounded-md px-2 py-1.5 text-sm w-full">
+              </div>
+            </div>
+          </div>
+
           <div class="flex items-center gap-3">
             <button id="btnCreatePlanActivity" class="text-xs bg-navy text-white px-4 py-2 rounded-md hover:bg-navy-light">Crear actividad</button>
             <button id="btnCancelPlanActivity" type="button" class="text-xs text-gray-500 hover:text-gray-700">Cancelar</button>
@@ -1504,6 +1535,9 @@ modeSelector.addEventListener('change', async () => {
 });
 
 /* ---------------- Plan CDI: alta de actividad (segmento existente o nuevo) ---------------- */
+// Por defecto toda actividad del plan va al Gantt: se crea la tarea
+// vinculada en el mismo paso (el checkbox permite excluir hitos puramente
+// administrativos que no necesitan seguimiento día a día).
 document.getElementById('btnNewPlanActivity').addEventListener('click', () => {
   const form = document.getElementById('planNewForm');
   const select = document.getElementById('planNewStageSelect');
@@ -1517,10 +1551,20 @@ document.getElementById('btnNewPlanActivity').addEventListener('click', () => {
   } else {
     nameWrap.classList.add('hidden');
   }
+  const today = new Date().toISOString().slice(0, 10);
+  const startInput = document.getElementById('planNewGanttStart');
+  const endInput = document.getElementById('planNewGanttEnd');
+  if (!startInput.value) startInput.value = today;
+  if (!endInput.value) endInput.value = today;
+  document.getElementById('planNewGoesToGantt').checked = true;
+  document.getElementById('planNewGanttFields').classList.remove('hidden');
   form.classList.toggle('hidden');
 });
 document.getElementById('planNewStageSelect').addEventListener('change', (e) => {
   document.getElementById('planNewStageNameWrap').classList.toggle('hidden', e.target.value !== '__new__');
+});
+document.getElementById('planNewGoesToGantt').addEventListener('change', (e) => {
+  document.getElementById('planNewGanttFields').classList.toggle('hidden', !e.target.checked);
 });
 document.getElementById('btnCancelPlanActivity').addEventListener('click', () => {
   document.getElementById('planNewForm').classList.add('hidden');
@@ -1532,14 +1576,22 @@ document.getElementById('btnCreatePlanActivity').addEventListener('click', async
   const deliverableInput = document.getElementById('planNewDeliverable');
   const durationInput = document.getElementById('planNewDuration');
   const dependenciesInput = document.getElementById('planNewDependencies');
+  const goesToGantt = document.getElementById('planNewGoesToGantt').checked;
+  const responsibleInput = document.getElementById('planNewGanttResponsible');
+  const priorityInput = document.getElementById('planNewGanttPriority');
+  const startInput = document.getElementById('planNewGanttStart');
+  const endInput = document.getElementById('planNewGanttEnd');
+
   const stage = (select.value === '__new__' ? stageNameInput.value : select.value).trim();
   const activity = activityInput.value.trim() || 'Nueva actividad';
   if (!stage) { alert('Ingresá o elegí el segmento de la actividad.'); return; }
+  if (goesToGantt && (!startInput.value || !endInput.value)) { alert('Si la actividad va al Gantt, completá fecha de inicio y fin.'); return; }
 
-  const record = {
+  const activityId = 'X-' + Date.now().toString().slice(-4);
+  const planRecord = {
     id: nextTempId('plan_stages'),
     stage,
-    activity_id: 'X-' + Date.now().toString().slice(-4),
+    activity_id: activityId,
     activity,
     description: '',
     deliverable: deliverableInput.value.trim(),
@@ -1547,7 +1599,25 @@ document.getElementById('btnCreatePlanActivity').addEventListener('click', async
     dependencies: dependenciesInput.value.trim(),
     completed: false
   };
-  state.plan_stages.push(record);
+  state.plan_stages.push(planRecord);
+
+  let taskRecord = null;
+  if (goesToGantt) {
+    taskRecord = {
+      id: nextTempId('tasks'),
+      stage,
+      activity,
+      responsible: responsibleInput.value.trim(),
+      priority: priorityInput.value,
+      start_date: startInput.value,
+      end_date: endInput.value,
+      status: 'No iniciado',
+      progress: 0,
+      stage_activity_id: activityId
+    };
+    state.tasks.push(taskRecord);
+  }
+
   render();
   document.getElementById('planNewForm').classList.add('hidden');
   activityInput.value = '';
@@ -1555,7 +1625,10 @@ document.getElementById('btnCreatePlanActivity').addEventListener('click', async
   deliverableInput.value = '';
   durationInput.value = '';
   dependenciesInput.value = '';
-  await persist('plan_stages', record.id, record, true, state.plan_stages, record);
+  responsibleInput.value = '';
+
+  await persist('plan_stages', planRecord.id, planRecord, true, state.plan_stages, planRecord);
+  if (taskRecord) await persist('tasks', taskRecord.id, taskRecord, true, state.tasks, taskRecord);
   render();
 });
 
