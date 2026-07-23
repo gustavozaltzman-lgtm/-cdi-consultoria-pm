@@ -554,7 +554,7 @@ const DEMO_DATA = {
     { id: 3, action_name: 'Contactar proveedores alternativos de WMS', stage: 'Diseño', responsible: 'Analista TI', priority: 'Media', commitment_date: '2026-03-30', status: 'No iniciada', progress: 0, origin: 'Gestión de riesgos' }
   ],
   kpis: [
-    { id: 1, category: 'Precisión de Inventario', indicator: 'Exactitud de Inventario (ERI)', unit: '%', initial_value: 82, target_value: 98, current_value: 85.5, responsible: 'Consultor Senior' },
+    { id: 1, category: 'Precisión de Inventario', indicator: 'Exactitud de Inventario (ERI)', unit: '%', initial_value: 82, target_value: 98, current_value: 93.1, responsible: 'Consultor Senior', linked_audit_kpi_name: 'IRA % (Exactitud de Inventario)' },
     { id: 2, category: 'Productividad', indicator: 'Unidades por Hora (UPH)', unit: 'uds/h', initial_value: 45, target_value: 75, current_value: 52, responsible: 'Equipo CDI' },
     { id: 3, category: 'Tiempos', indicator: 'Tiempo promedio de recepción', unit: 'min/pallet', initial_value: 38, target_value: 15, current_value: 32, responsible: 'Equipo CDI' },
     { id: 4, category: 'Calidad', indicator: 'Tasa de errores de picking', unit: '%', initial_value: 3.2, target_value: 0.5, current_value: 2.6, responsible: 'Consultor Senior' },
@@ -926,6 +926,14 @@ function renderKpis() {
       <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden"><div class="h-full bg-brandgreen" style="width:${progressToTarget}%"></div></div>
       <p class="text-[11px] ${improved ? 'text-green-600' : 'text-red-500'}">${trendArrow} desde ${k.initial_value}${k.unit} · brecha ${gap}${k.unit}</p>
       <p class="text-[11px] text-gray-400">Resp: ${k.responsible || '-'}</p>
+      <div class="pt-1 border-t">
+        <label class="text-[10px] text-gray-400 block mb-0.5">Vincular a auditoría cíclica</label>
+        <select data-edit-select data-table="kpis" data-id="${k.id}" data-field="linked_audit_kpi_name" class="w-full text-[11px] border rounded px-1 py-0.5 bg-white">
+          <option value="" ${!k.linked_audit_kpi_name ? 'selected' : ''}>— manual (sin vincular) —</option>
+          ${AUDIT_KPI_DEFS.map((d) => `<option value="${d.name}" ${k.linked_audit_kpi_name === d.name ? 'selected' : ''}>${d.label}</option>`).join('')}
+        </select>
+        ${k.linked_audit_kpi_name ? `<p class="text-[10px] text-amber-600 mt-0.5">Se actualiza solo con el último ciclico guardado.</p>` : ''}
+      </div>
     </div>`;
   }).join('') || `<p class="text-gray-400 text-sm">Sin KPIs definidos.</p>`;
 
@@ -971,6 +979,18 @@ function kpiColor(def, value) {
 }
 function auditLabel(a) {
   return `${fmtDate(a.audit_date)} · ${a.branch_name}${a.auditor_name ? ' · ' + a.auditor_name : ''}`;
+}
+
+// Actualiza en memoria el current_value de cualquier tarjeta de KPIs
+// Logísticos que esté vinculada a alguno de los KPIs recién calculados.
+function applyLinkedKpiUpdates(computedKpis) {
+  const byName = {};
+  computedKpis.forEach((k) => { byName[k.kpi_name] = k.calculated_value; });
+  state.kpis.forEach((k) => {
+    if (k.linked_audit_kpi_name && byName[k.linked_audit_kpi_name] !== undefined) {
+      k.current_value = byName[k.linked_audit_kpi_name];
+    }
+  });
 }
 
 let chartAuditKpis;
@@ -1144,6 +1164,7 @@ function applyEdit(table, id, field, value) {
   if (!record) return;
   let v = value;
   if (field === 'progress' && v !== '') v = Math.max(0, Math.min(100, Number(v) || 0));
+  if (field === 'linked_audit_kpi_name' && v === '') v = null;
   record[field] = v;
   persist(table, record.id, { [field]: v }, false, state[table], record);
   render();
@@ -1156,7 +1177,7 @@ const NEW_RECORD_DEFAULTS = {
   risks: () => ({ risk: 'Nuevo riesgo', category: '', probability: 'Media', impact: 'Medio', level: 'MEDIO', responsible: '', mitigation: '', status: 'Activo' }),
   minutes: () => ({ meeting_date: new Date().toISOString().slice(0, 10), meeting_type: '', topic: 'Nueva minuta', decisions: '', actions: '', responsible: '', status: 'Pendiente' }),
   actions: () => ({ action_name: 'Nueva acción', stage: '', responsible: '', priority: 'Media', commitment_date: '', status: 'No iniciada', progress: 0, origin: 'Manual' }),
-  kpis: () => ({ category: 'General', indicator: 'Nuevo KPI', unit: '%', initial_value: 0, target_value: 100, current_value: 0, responsible: '' }),
+  kpis: () => ({ category: 'General', indicator: 'Nuevo KPI', unit: '%', initial_value: 0, target_value: 100, current_value: 0, responsible: '', linked_audit_kpi_name: null }),
   before_after: () => ({ area: 'General', indicator: 'Nuevo indicador', unit: '', initial_value: 0, final_value: null, observations: '' }),
   team_members: () => ({ name: 'Nuevo integrante', role: '', email: `nuevo${Date.now()}@cdiconsultoria.com`, color: '#1e3a5f' })
 };
@@ -1267,10 +1288,13 @@ document.getElementById('auditForm').addEventListener('submit', async (e) => {
   }
 
   // Optimistic UI: se muestra el registro y sus KPIs calculados de inmediato,
-  // sin esperar la confirmación del servidor.
+  // sin esperar la confirmación del servidor. También se actualiza el
+  // current_value de cualquier tarjeta de KPIs Logísticos vinculada.
   const tempId = nextTempId('audit_logs');
+  const computedKpis = AuditKpis.computeAuditKpis(payload);
   state.audit_logs.push({ id: tempId, ...payload });
-  state.kpi_history.push(...AuditKpis.computeAuditKpis(payload).map((k, i) => ({ id: `temp-${tempId}-${i}`, audit_id: tempId, recorded_at: payload.audit_date, ...k })));
+  state.kpi_history.push(...computedKpis.map((k, i) => ({ id: `temp-${tempId}-${i}`, audit_id: tempId, recorded_at: payload.audit_date, ...k })));
+  applyLinkedKpiUpdates(computedKpis);
   render();
   switchView('audits');
   form.reset();
@@ -1292,9 +1316,13 @@ document.getElementById('auditForm').addEventListener('submit', async (e) => {
     // Reconciliar: reemplazar el registro optimista por el confirmado del servidor.
     state.audit_logs = state.audit_logs.filter((a) => a.id !== tempId);
     state.kpi_history = state.kpi_history.filter((k) => k.audit_id !== tempId);
-    const { kpis, ...auditRow } = res.data;
+    const { kpis, updated_kpis, ...auditRow } = res.data;
     state.audit_logs.push(auditRow);
     state.kpi_history.push(...kpis);
+    (updated_kpis || []).forEach((uk) => {
+      const idx = state.kpis.findIndex((k) => k.id === uk.id);
+      if (idx !== -1) state.kpis[idx] = uk;
+    });
     saveLocal();
     setSync('synced');
     msg.textContent = 'Auditoría guardada.';

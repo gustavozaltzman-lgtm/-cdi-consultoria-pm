@@ -109,7 +109,7 @@ const TABLES = {
     order: 'id DESC'
   },
   kpis: {
-    columns: ['category', 'indicator', 'unit', 'initial_value', 'target_value', 'current_value', 'responsible'],
+    columns: ['category', 'indicator', 'unit', 'initial_value', 'target_value', 'current_value', 'responsible', 'linked_audit_kpi_name'],
     order: 'id ASC'
   },
   before_after: {

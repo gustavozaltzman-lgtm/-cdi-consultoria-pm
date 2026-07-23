@@ -79,16 +79,25 @@ router.post('/', asyncRoute(async (req, res) => {
     const kpis = computeAuditKpis(auditLog);
 
     const kpiRows = [];
+    const updatedKpis = [];
     for (const kpi of kpis) {
-      const { rows } = await client.query(
+      const inserted = await client.query(
         `INSERT INTO kpi_history (company_id, audit_id, kpi_category, kpi_name, calculated_value)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
         [req.companyId, auditLog.id, kpi.kpi_category, kpi.kpi_name, kpi.calculated_value]
       );
-      kpiRows.push(rows[0]);
+      kpiRows.push(inserted.rows[0]);
+
+      // Si alguna tarjeta manual de kpis está vinculada a este KPI calculado,
+      // su current_value se actualiza solo con el resultado de este ciclo.
+      const linked = await client.query(
+        `UPDATE kpis SET current_value = $1 WHERE company_id = $2 AND linked_audit_kpi_name = $3 RETURNING *`,
+        [kpi.calculated_value, req.companyId, kpi.kpi_name]
+      );
+      updatedKpis.push(...linked.rows);
     }
     await client.query('COMMIT');
-    res.status(201).json(ok({ ...auditLog, kpis: kpiRows }));
+    res.status(201).json(ok({ ...auditLog, kpis: kpiRows, updated_kpis: updatedKpis }));
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
