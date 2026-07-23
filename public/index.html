@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CDI Consultoría — Gestión de Proyectos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -13,28 +16,66 @@
     theme: {
       extend: {
         colors: {
-          navy: { DEFAULT: '#1e3a5f', dark: '#152a45', light: '#2c5282' },
-          brandgreen: '#38a169',
-          amber: '#d69e2e',
-          panel: '#f8f9fa'
+          navy: { DEFAULT: '#14283F', dark: '#0B1826', light: '#24405F' },
+          brandgreen: '#2F855A',
+          amber: '#C08A34',
+          ink: '#1A2233',
+          slate: '#64748B',
+          line: '#E4E1DA',
+          panel: '#F7F6F3'
+        },
+        fontFamily: {
+          sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+          display: ['"Space Grotesk"', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+          mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace']
         }
       }
     }
   };
 </script>
 <style>
-  body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; }
-  .cell-editable:hover { background-color: #fffbea; cursor: text; }
-  .cell-editable:focus { outline: 2px solid #d69e2e; background: white; }
+  body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #1A2233; }
+  h1, h2, h3, .font-display { font-family: 'Space Grotesk', 'Plus Jakarta Sans', system-ui, sans-serif; letter-spacing: -0.01em; }
+  .font-stat { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-feature-settings: "tnum"; letter-spacing: -0.02em; }
+
+  .cell-editable:hover { background-color: #FBF3E4; cursor: text; }
+  .cell-editable:focus { outline: 2px solid #C08A34; outline-offset: -1px; background: white; }
+  :focus-visible { outline: 2px solid #C08A34; outline-offset: 2px; }
+
   ::-webkit-scrollbar { height: 8px; width: 8px; }
-  ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
-  .sidebar-link.active { background-color: rgba(255,255,255,0.12); border-left: 3px solid #d69e2e; }
+  ::-webkit-scrollbar-thumb { background: #D8D4CB; border-radius: 4px; }
+
+  .sidebar-link { border-left: 3px solid transparent; transition: background-color .15s ease, border-color .15s ease; }
+  .sidebar-link.active { background-color: rgba(255,255,255,0.08); border-left-color: #C08A34; }
+  .sidebar-link:hover { border-left-color: rgba(192,138,52,0.5); }
+
   .view { display: none; }
-  .view.active { display: block; }
-  [contenteditable]:empty:before { content: attr(data-placeholder); color: #a0aec0; }
+  .view.active { display: block; animation: view-in .18s ease; }
+  @keyframes view-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .view.active { animation: none; } }
+
+  [contenteditable]:empty:before { content: attr(data-placeholder); color: #94A3B8; }
+
+  button { transition: background-color .15s ease, border-color .15s ease, transform .05s ease; }
+  button:active { transform: scale(0.98); }
+
+  table thead th { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+  table tbody tr { transition: background-color .1s ease; }
+
+  /* Firma visual: un remate tipo "código de barras" en cada tarjeta/panel —
+     referencia directa al rubro (auditoría cíclica / RFID) sin ser literal. */
+  .rounded-xl.shadow-sm { position: relative; }
+  .rounded-xl.shadow-sm::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem;
+    background-image: repeating-linear-gradient(90deg, #14283F 0 3px, transparent 3px 6px, #C08A34 6px 8px, transparent 8px 13px);
+    opacity: 0.55;
+  }
 </style>
 </head>
-<body class="bg-panel text-gray-800 min-h-screen">
+<body class="bg-panel text-ink min-h-screen">
 
 <!-- LOGIN -->
 <div id="loginScreen" class="min-h-screen flex items-center justify-center bg-navy px-4">
@@ -120,30 +161,43 @@
       <section id="view-dashboard" class="view active space-y-6">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 border-navy">
-            <p class="text-xs text-gray-500">Avance General</p>
-            <p id="kpiOverallProgress" class="text-2xl font-bold text-navy">—</p>
+            <p class="text-[10px] font-mono uppercase tracking-wider text-slate">Avance General</p>
+            <p id="kpiOverallProgress" class="text-3xl font-stat font-semibold text-navy mt-1">—</p>
           </div>
           <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 border-brandgreen">
-            <p class="text-xs text-gray-500">Tareas Totales</p>
-            <p id="kpiTotalTasks" class="text-2xl font-bold text-brandgreen">—</p>
+            <p class="text-[10px] font-mono uppercase tracking-wider text-slate">Tareas Totales</p>
+            <p id="kpiTotalTasks" class="text-3xl font-stat font-semibold text-brandgreen mt-1">—</p>
           </div>
           <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 border-amber">
-            <p class="text-xs text-gray-500">Días Restantes</p>
-            <p id="kpiDaysRemaining" class="text-2xl font-bold text-amber">—</p>
+            <p class="text-[10px] font-mono uppercase tracking-wider text-slate">Días Restantes</p>
+            <p id="kpiDaysRemaining" class="text-3xl font-stat font-semibold text-amber mt-1">—</p>
           </div>
           <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 border-red-500">
-            <p class="text-xs text-gray-500">Riesgos Activos</p>
-            <p id="kpiActiveRisks" class="text-2xl font-bold text-red-500">—</p>
+            <p class="text-[10px] font-mono uppercase tracking-wider text-slate">Riesgos Activos</p>
+            <p id="kpiActiveRisks" class="text-3xl font-stat font-semibold text-red-500 mt-1">—</p>
           </div>
         </div>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div class="bg-white rounded-xl shadow-sm p-4">
-            <h3 class="font-semibold text-navy mb-2 text-sm">Estado de Tareas</h3>
+            <h3 class="font-display font-semibold text-navy mb-3 text-sm">Estado de Tareas</h3>
             <canvas id="chartStatus" height="220"></canvas>
           </div>
-          <div class="bg-white rounded-xl shadow-sm p-4">
-            <h3 class="font-semibold text-navy mb-2 text-sm">Avance por Etapa</h3>
+          <div class="bg-white rounded-xl shadow-sm p-4 lg:col-span-2">
+            <h3 class="font-display font-semibold text-navy mb-3 text-sm">Avance por Etapa</h3>
             <canvas id="chartStage" height="220"></canvas>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div class="bg-white rounded-xl shadow-sm p-4">
+            <h3 class="font-display font-semibold text-navy mb-3 text-sm">Riesgos por Nivel</h3>
+            <canvas id="chartRiskLevel" height="220"></canvas>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-4 lg:col-span-2">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-display font-semibold text-navy text-sm">Próximos Vencimientos</h3>
+              <span class="text-[10px] font-mono uppercase tracking-wider text-slate">Acciones comprometidas</span>
+            </div>
+            <div id="upcomingDeadlines" class="divide-y divide-line"></div>
           </div>
         </div>
       </section>
@@ -795,7 +849,19 @@ function progressBar(value) {
 }
 
 /* ---------------- Render: Dashboard ---------------- */
-let chartStatus, chartStage, chartKpis;
+// Paleta compartida por todos los charts, derivada de los mismos tokens que
+// el resto de la UI (ver tailwind.config) — así los gráficos no desentonan
+// con el resto de la app.
+const CHART_COLORS = { navy: '#14283F', navyLight: '#24405F', amber: '#C08A34', green: '#2F855A', red: '#C53030', slate: '#94A3B8', line: '#E4E1DA' };
+if (typeof Chart !== 'undefined') {
+  Chart.defaults.font.family = "'Plus Jakarta Sans', system-ui, sans-serif";
+  Chart.defaults.color = '#64748B';
+  Chart.defaults.borderColor = CHART_COLORS.line;
+}
+const STATUS_CHART_COLORS = { 'No iniciado': CHART_COLORS.slate, 'En proceso': CHART_COLORS.navyLight, 'Bloqueado': CHART_COLORS.red, 'Finalizado': CHART_COLORS.green };
+const RISK_LEVEL_COLORS = { 'BAJO': CHART_COLORS.green, 'MEDIO': CHART_COLORS.amber, 'CRÍTICO': CHART_COLORS.red };
+
+let chartStatus, chartStage, chartKpis, chartRiskLevel;
 function renderDashboard() {
   document.getElementById('headerProjectName').textContent = state.config?.project_name || '—';
   document.getElementById('headerClientName').textContent = state.config?.client_name || '—';
@@ -823,15 +889,20 @@ function renderDashboard() {
     stageMap[t.stage].sum += Number(t.progress || 0);
   });
 
+  const statusLabels = Object.keys(byStatus);
   const statusCtx = document.getElementById('chartStatus');
   if (chartStatus) chartStatus.destroy();
   chartStatus = new Chart(statusCtx, {
-    type: 'pie',
+    type: 'doughnut',
     data: {
-      labels: Object.keys(byStatus),
-      datasets: [{ data: Object.values(byStatus), backgroundColor: ['#a0aec0', '#2c5282', '#e53e3e', '#38a169'] }]
+      labels: statusLabels,
+      datasets: [{
+        data: statusLabels.map(s => byStatus[s]),
+        backgroundColor: statusLabels.map(s => STATUS_CHART_COLORS[s] || CHART_COLORS.slate),
+        borderWidth: 2, borderColor: '#fff'
+      }]
     },
-    options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
+    options: { cutout: '62%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true, font: { size: 11 } } } } }
   });
 
   const stageCtx = document.getElementById('chartStage');
@@ -841,10 +912,76 @@ function renderDashboard() {
     type: 'bar',
     data: {
       labels: stageLabels,
-      datasets: [{ label: '% Avance', data: stageLabels.map(s => (stageMap[s].sum / stageMap[s].total).toFixed(1)), backgroundColor: '#1e3a5f' }]
+      datasets: [{
+        label: '% Avance',
+        data: stageLabels.map(s => (stageMap[s].sum / stageMap[s].total).toFixed(1)),
+        backgroundColor: CHART_COLORS.navy,
+        borderRadius: 4, maxBarThickness: 28
+      }]
     },
-    options: { scales: { y: { beginAtZero: true, max: 100 } }, plugins: { legend: { display: false } } }
+    options: {
+      indexAxis: 'y',
+      scales: {
+        x: { beginAtZero: true, max: 100, grid: { color: CHART_COLORS.line } },
+        y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+      },
+      plugins: { legend: { display: false } }
+    }
   });
+
+  const riskByLevel = { 'BAJO': 0, 'MEDIO': 0, 'CRÍTICO': 0 };
+  state.risks.forEach(r => { if (riskByLevel[r.level] !== undefined) riskByLevel[r.level]++; });
+  const riskCtx = document.getElementById('chartRiskLevel');
+  if (chartRiskLevel) chartRiskLevel.destroy();
+  const hasRisks = state.risks.length > 0;
+  chartRiskLevel = new Chart(riskCtx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(riskByLevel),
+      datasets: [{
+        data: hasRisks ? Object.values(riskByLevel) : [1],
+        backgroundColor: hasRisks ? Object.keys(riskByLevel).map(l => RISK_LEVEL_COLORS[l]) : [CHART_COLORS.line],
+        borderWidth: 2, borderColor: '#fff'
+      }]
+    },
+    options: {
+      cutout: '62%',
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true, font: { size: 11 } } },
+        tooltip: { enabled: hasRisks }
+      }
+    }
+  });
+
+  renderUpcomingDeadlines();
+}
+
+// Próximas acciones a vencer (no cerradas, con fecha de compromiso futura o
+// vencida), para que el Dashboard también responda "qué hay que hacer ya".
+function renderUpcomingDeadlines() {
+  const container = document.getElementById('upcomingDeadlines');
+  if (!container) return;
+  const today = new Date();
+  const upcoming = state.actions
+    .filter(a => a.status !== 'Cerrada' && a.commitment_date)
+    .sort((a, b) => new Date(a.commitment_date) - new Date(b.commitment_date))
+    .slice(0, 6);
+
+  container.innerHTML = upcoming.length ? upcoming.map(a => {
+    const due = new Date(a.commitment_date);
+    const daysLeft = Math.ceil((due - today) / 86400000);
+    const overdue = daysLeft < 0;
+    const dueLabel = overdue ? `Venció hace ${Math.abs(daysLeft)}d` : daysLeft === 0 ? 'Vence hoy' : `Vence en ${daysLeft}d`;
+    const dueColor = overdue ? 'text-red-600' : daysLeft <= 3 ? 'text-amber' : 'text-slate';
+    return `
+    <div class="py-2 flex items-center justify-between gap-3">
+      <div class="min-w-0">
+        <p class="text-sm font-medium truncate">${a.action_name}</p>
+        <p class="text-[11px] text-slate">${a.responsible || 'Sin responsable'} · ${fmtDate(a.commitment_date)}</p>
+      </div>
+      <span class="text-[11px] font-mono font-semibold shrink-0 ${dueColor}">${dueLabel}</span>
+    </div>`;
+  }).join('') : `<p class="text-sm text-slate py-2">Sin acciones pendientes con fecha de compromiso.</p>`;
 }
 
 /* ---------------- Render: Gantt (tasks) ---------------- */
@@ -1014,7 +1151,7 @@ function renderKpis() {
         <button data-del="kpis" data-id="${k.id}" class="text-red-300 hover:text-red-600 text-xs">✕</button>
       </div>
       <div class="flex items-end gap-2">
-        <span class="text-2xl font-bold text-navy" contenteditable="true" data-table="kpis" data-id="${k.id}" data-field="current_value">${k.current_value}</span>
+        <span class="text-2xl font-stat font-semibold text-navy" contenteditable="true" data-table="kpis" data-id="${k.id}" data-field="current_value">${k.current_value}</span>
         <span class="text-xs text-gray-400">${k.unit} · objetivo ${k.target_value}${k.unit}</span>
       </div>
       <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden"><div class="h-full bg-brandgreen" style="width:${progressToTarget}%"></div></div>
@@ -1038,12 +1175,12 @@ function renderKpis() {
     data: {
       labels: state.kpis.map(k => k.indicator),
       datasets: [
-        { label: 'Inicial', data: state.kpis.map(k => k.initial_value), backgroundColor: '#a0aec0' },
-        { label: 'Actual', data: state.kpis.map(k => k.current_value), backgroundColor: '#1e3a5f' },
-        { label: 'Objetivo', data: state.kpis.map(k => k.target_value), backgroundColor: '#38a169' }
+        { label: 'Inicial', data: state.kpis.map(k => k.initial_value), backgroundColor: CHART_COLORS.slate, borderRadius: 3 },
+        { label: 'Actual', data: state.kpis.map(k => k.current_value), backgroundColor: CHART_COLORS.navy, borderRadius: 3 },
+        { label: 'Objetivo', data: state.kpis.map(k => k.target_value), backgroundColor: CHART_COLORS.green, borderRadius: 3 }
       ]
     },
-    options: { scales: { x: { ticks: { font: { size: 10 } } } }, plugins: { legend: { position: 'bottom' } } }
+    options: { scales: { x: { ticks: { font: { size: 10 } } }, y: { grid: { color: CHART_COLORS.line } } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } } } }
   });
 
   renderAuditTrendChart();
@@ -1093,7 +1230,7 @@ function renderAuditTrendChart() {
   if (!ctx) return;
   const chronological = [...state.audit_logs].sort((a, b) => new Date(a.audit_date) - new Date(b.audit_date) || a.id - b.id);
   const labels = chronological.map((a) => `${fmtDate(a.audit_date)} · ${a.branch_name}`);
-  const colors = ['#1e3a5f', '#e53e3e', '#d69e2e', '#38a169'];
+  const colors = [CHART_COLORS.navy, CHART_COLORS.red, CHART_COLORS.amber, CHART_COLORS.green];
 
   if (chartAuditKpis) chartAuditKpis.destroy();
   chartAuditKpis = new Chart(ctx, {
@@ -1105,10 +1242,11 @@ function renderAuditTrendChart() {
         data: chronological.map((a) => kpisForAudit(a.id)[d.name] ?? null),
         borderColor: colors[i],
         backgroundColor: colors[i],
-        tension: 0.25
+        tension: 0.3,
+        pointRadius: 3
       }))
     },
-    options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } } }
+    options: { scales: { y: { beginAtZero: true, grid: { color: CHART_COLORS.line } }, x: { grid: { display: false } } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true, font: { size: 10 } } } } }
   });
 }
 
@@ -1166,7 +1304,7 @@ function renderAuditDetail(auditId) {
           ${AUDIT_KPI_DEFS.map((d) => `
             <div class="bg-panel rounded-lg p-3 space-y-1">
               <p class="text-[11px] text-gray-400">${d.label}</p>
-              <p class="text-xl font-bold ${kpiColor(d, k[d.name])}">${fmtKpi(k[d.name])}</p>
+              <p class="text-xl font-stat font-semibold ${kpiColor(d, k[d.name])}">${fmtKpi(k[d.name])}</p>
             </div>`).join('')}
         </div>
       </div>
